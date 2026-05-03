@@ -11,11 +11,13 @@
 ```bash
 # 1. Клонировать репозиторий
 git clone <url>
-cd survey_analytics_app
+cd analytics_reports
 
 # 2. Создать виртуальное окружение и установить зависимости
 python -m venv venv
-venv\Scripts\activate        # Windows
+
+зайти и нажать:
+venv\Scripts\activate.bat        # Windows
 # source venv/bin/activate   # Linux / macOS
 
 pip install -r requirements.txt
