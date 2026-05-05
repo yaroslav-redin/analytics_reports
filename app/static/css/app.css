@@ -42,11 +42,12 @@
     border-radius: 14px;
     padding: 1.75rem 2rem;
     box-shadow: 0 2px 20px rgba(0,0,0,.09);
-    max-width: 700px;
+    max-width: 80%;
     margin: 0 auto;
     width: 100%;
+    min-height: 77vh;
 }
-.wizard-card-wide { max-width: 960px; }
+.wizard-card-wide { max-width: 90%; }
 
 .wizard-step-header {
     display: flex;
@@ -83,6 +84,7 @@
     border-radius: 16px;
     background: #fff;
     padding: 3rem 2rem 2rem;
+
     text-align: center;
     cursor: default;
     transition: border-color 0.25s, background 0.25s, box-shadow 0.25s;
@@ -100,17 +102,19 @@
     max-width: 440px;
     margin: 0.75rem auto 0;
     text-align: left;
+    min-height: 72px;
 }
 
 /* ===================== WIZARD NAV BAR ===================== */
 .wizard-nav-bar {
     flex-shrink: 0;
-    height: 50px;
+    height: 68px;
     background: #fff;
     border-top: 1px solid #dee2e6;
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
+    padding: 0 1.5rem;
     box-shadow: 0 -2px 8px rgba(0,0,0,.04);
 }
 
@@ -161,6 +165,25 @@ th:hover .row-toggle-container, th.col-excluded .row-toggle-container { opacity:
 .mapping-btn { cursor: pointer; color: #0d6efd; font-size: 1.2rem; text-decoration: none; }
 
 .row-top-highlight > td { color: var(--top-color, #dc3545); font-weight: bold;}
+
+.q-filtered { display: none !important; }
+
+#wizardStep2 .input-group .form-control,
+#wizardStep2 .input-group .btn {
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+}
+#wizardStep2 #allQuestionsList {
+    border-top: none !important;
+    border-top-left-radius: 0 !important;
+    border-top-right-radius: 0 !important;
+}
+
+.q-item-container { cursor: pointer; border-radius: 6px !important; transition: background-color 0.15s; }
+.q-item-container:hover { background-color: #f1f3f5 !important; }
+
+.nav-fwd-btn { min-width: 200px; }
+#navBackBtn   { min-width: 120px; }
 
 #chartEditModal { pointer-events: none !important; background: transparent !important; }
 #chartEditModal .modal-dialog { pointer-events: auto;  }

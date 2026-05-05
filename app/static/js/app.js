@@ -18,6 +18,10 @@ function goToStep(n) {
     });
     const stepEl = document.getElementById(`wizardStep${n}`);
     if (stepEl) stepEl.scrollTop = 0;
+    document.getElementById('navBackBtn').classList.toggle('invisible', n === 0);
+    document.querySelectorAll('.nav-step-fwd').forEach(el => {
+        el.classList.toggle('d-none', parseInt(el.dataset.fwdStep) !== n);
+    });
 }
 
 document.getElementById('toStep4Btn').addEventListener('click', () => goToStep(3));
@@ -203,10 +207,12 @@ function renderQuestionsStep3() {
     const fileSelect = document.getElementById('fileSelectStep3');
     const fileSelectContainer = document.getElementById('fileSelectContainer');
     if (window.processedFiles.length > 1) {
+        if ($(fileSelect).hasClass('select2-hidden-accessible')) $(fileSelect).select2('destroy');
         fileSelect.innerHTML = window.processedFiles.map((f, i) =>
             `<option value="${i}">${f.original_name}</option>`
         ).join('');
         fileSelectContainer.style.display = '';
+        $(fileSelect).select2({ theme: 'bootstrap-5', width: '100%', language: 'ru'});
     } else {
         fileSelectContainer.style.display = 'none';
     }
@@ -220,6 +226,7 @@ function renderQuestionsStep3() {
 }
 
 function _renderQuestionsForFile(fileIdx) {
+    document.getElementById('questionsSearchInput').value = '';
     const container = document.getElementById('allQuestionsList');
     container.innerHTML = '';
     const f = window.processedFiles[fileIdx];
@@ -232,26 +239,44 @@ function _renderQuestionsForFile(fileIdx) {
     const inner = document.createElement('div');
     inner.style.cssText = 'width:max-content;min-width:100%';
 
-    f.columns.forEach((colObj) => {
+    f.columns.forEach((colObj, colIdx) => {
         const isSystem = colObj.is_system;
         const qName = colObj.name;
+        const cbId = `qcb_${fileIdx}_${colIdx}`;
         const item = document.createElement('div');
         const hiddenClass = isSystem ? 'system-col' + (showHidden ? '' : ' d-none') : '';
         const labelColor = isSystem ? 'text-secondary' : 'text-dark';
         item.className = `list-group-item d-flex align-items-center gap-2 py-2 q-item-container ${hiddenClass}`;
         item.dataset.qname = qName;
         item.innerHTML = `
-            <input class="form-check-input flex-shrink-0 q-checkbox" type="checkbox" value="${qName}"${selectedQNames.has(qName) ? ' checked' : ''}>
-            <label class="form-check-label fw-medium ${labelColor}" style="white-space:nowrap;cursor:pointer" title="${qName}">${qName}</label>`;
+            <input class="form-check-input flex-shrink-0 q-checkbox" type="checkbox" id="${cbId}" value="${qName}"${selectedQNames.has(qName) ? ' checked' : ''}>
+            <label class="form-check-label fw-medium ${labelColor}" for="${cbId}" style="white-space:nowrap;cursor:pointer" title="${qName}">${qName}</label>`;
         inner.appendChild(item);
     });
 
     container.appendChild(inner);
 
-    const total = container.querySelectorAll('.q-item-container:not(.d-none)').length;
-    const checked = container.querySelectorAll('.q-item-container:not(.d-none) .q-checkbox:checked').length;
+    const total = container.querySelectorAll('.q-item-container:not(.d-none):not(.q-filtered)').length;
+    const checked = container.querySelectorAll('.q-item-container:not(.d-none):not(.q-filtered) .q-checkbox:checked').length;
     document.getElementById('selectAllQuestions').checked = (total === checked && total > 0);
 }
+
+function filterQuestionsList() {
+    const query = document.getElementById('questionsSearchInput').value.trim().toLowerCase();
+    document.querySelectorAll('#allQuestionsList .q-item-container').forEach(item => {
+        const matches = !query || (item.dataset.qname || '').toLowerCase().includes(query);
+        item.classList.toggle('q-filtered', !matches);
+    });
+    const total = document.querySelectorAll('#allQuestionsList .q-item-container:not(.d-none):not(.q-filtered)').length;
+    const checked = document.querySelectorAll('#allQuestionsList .q-item-container:not(.d-none):not(.q-filtered) .q-checkbox:checked').length;
+    document.getElementById('selectAllQuestions').checked = (total === checked && total > 0);
+}
+
+document.getElementById('questionsSearchInput').addEventListener('input', filterQuestionsList);
+document.getElementById('questionsSearchClear').addEventListener('click', () => {
+    document.getElementById('questionsSearchInput').value = '';
+    filterQuestionsList();
+});
 
 document.getElementById('fileSelectStep3').addEventListener('change', (e) => {
     document.querySelectorAll('#sortableQuestionsList .question-item').forEach(el => {
@@ -273,7 +298,7 @@ function renderLegendSettings() {
         <div class="d-flex align-items-center border p-2 rounded gap-2">
             <input type="color" class="form-control form-control-color legend-color" data-file="${f.clean_filename}" value="${color}" style="width: 36px; height: 30px; padding: 1px 2px; cursor: pointer;">
             <button type="button" class="btn btn-sm btn-outline-secondary random-legend-color-btn" data-file="${f.clean_filename}" title="Случайный цвет"><i class="fa-solid fa-dice-five"></i></button>
-            <input type="text" class="form-control form-control-sm legend-label" data-file="${f.clean_filename}" value="${f.original_name}" placeholder="Подпись файла">
+            <input type="text" class="form-control form-control-sm legend-label" data-file="${f.clean_filename}" value="${f.original_name.replace(/\.[^.]+$/, '')}" placeholder="Подпись файла" style="flex:1;min-width:200px;">
         </div>`;
     });
 }
@@ -369,13 +394,21 @@ window.openMappingModal = function (qName) {
         body.innerHTML += `
             <div class="mb-3">
                 <label class="form-label small text-muted fw-semibold">В файле: ${f.original_name}</label>
-                <input type="text" class="form-control form-control-sm mapping-search mb-1" placeholder="Поиск..." data-file="${f.clean_filename}">
-                <div style="overflow-x:auto">
-                    <select class="form-select form-select-sm mapping-select" style="min-width:100%;width:max-content;max-width:none;height:auto" size="6" data-file="${f.clean_filename}">${optionsHtml}</select>
-                </div>
+                <select class="mapping-select" data-file="${f.clean_filename}">${optionsHtml}</select>
             </div>`;
     }
-    new bootstrap.Modal(document.getElementById('dataMappingModal')).show();
+
+    const modalEl = document.getElementById('dataMappingModal');
+    $('.mapping-select').select2({
+        theme: 'bootstrap-5',
+        width: '100%',
+        dropdownParent: $(modalEl),
+        language: 'ru',
+        placeholder: '-- Не выбрано (Исключить) --',
+        allowClear: true
+    });
+
+    new bootstrap.Modal(modalEl).show();
 };
 
 document.getElementById('saveMappingBtn').addEventListener('click', () => {
@@ -408,14 +441,22 @@ document.getElementById('saveMappingBtn').addEventListener('click', () => {
     bootstrap.Modal.getInstance(document.getElementById('dataMappingModal')).hide();
 });
 
+document.getElementById('allQuestionsList').addEventListener('click', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'LABEL') return;
+    const container = e.target.closest('.q-item-container');
+    if (!container) return;
+    const cb = container.querySelector('.q-checkbox');
+    if (cb) cb.click();
+});
+
 document.getElementById('allQuestionsList').addEventListener('change', (e) => {
     if (e.target.classList.contains('q-checkbox')) {
         const sourceFileIdx = parseInt(document.getElementById('fileSelectStep3').value || '0', 10);
         if (e.target.checked) addQuestionToSortable(e.target.value, sourceFileIdx);
         else removeQuestionFromSortable(e.target.value);
 
-        const total = document.querySelectorAll('.q-item-container:not(.d-none)').length;
-        const checked = document.querySelectorAll('.q-item-container:not(.d-none) .q-checkbox:checked').length;
+        const total = document.querySelectorAll('.q-item-container:not(.d-none):not(.q-filtered)').length;
+        const checked = document.querySelectorAll('.q-item-container:not(.d-none):not(.q-filtered) .q-checkbox:checked').length;
         document.getElementById('selectAllQuestions').checked = (total === checked && total > 0);
     }
 });
@@ -437,7 +478,7 @@ document.getElementById('sheetCheckboxesContainer').addEventListener('change', (
 document.getElementById('selectAllQuestions').addEventListener('change', (e) => {
     const isChecked = e.target.checked;
     const sourceFileIdx = parseInt(document.getElementById('fileSelectStep3').value || '0', 10);
-    document.querySelectorAll('.q-item-container:not(.d-none)').forEach(el => {
+    document.querySelectorAll('.q-item-container:not(.d-none):not(.q-filtered)').forEach(el => {
         const cb = el.querySelector('.q-checkbox');
         if (cb.checked !== isChecked) {
             cb.checked = isChecked;
@@ -1607,22 +1648,6 @@ document.addEventListener('input', (e) => {
             rowData._total = Object.values(rowData.counts).reduce((a, b) => a + b, 0);
         }
     }
-    if (e.target.classList.contains('mapping-search')) {
-        const fileCF = e.target.dataset.file;
-        const fileObj = window.processedFiles.find(f => f.clean_filename === fileCF);
-        if (!fileObj) return;
-        const search = e.target.value.toLowerCase();
-        const select = document.querySelector(`.mapping-select[data-file="${fileCF}"]`);
-        const currentSelected = select.value;
-        let optionsHtml = `<option value="">-- Не выбрано (Исключить) --</option>`;
-        fileObj.columns.forEach(c => {
-            if (!search || c.name.toLowerCase().includes(search)) {
-                const sel = c.name === currentSelected ? 'selected' : '';
-                optionsHtml += `<option value="${c.name}" ${sel}>${c.name}</option>`;
-            }
-        });
-        select.innerHTML = optionsHtml;
-    }
 });
 
 document.addEventListener('focusout', (e) => {
@@ -1719,7 +1744,7 @@ document.getElementById('analyzeForm').addEventListener('submit', async (e) => {
                         </div>
                     </div>`).join('');
 
-                const html = `<div class="result-item">
+                const html = `<h5 class="fw-semibold text-dark mb-2">${item.col_name}</h5><div class="result-item">
                     <ul class="nav nav-tabs ui-system-font" id="tabs_${id}">
                         <li class="nav-item"><button class="nav-link active viz-tab-btn" data-id="${id}" data-tab="table"><i class="fa-solid fa-table me-1"></i>Таблица</button></li>
                         <li class="nav-item"><button class="nav-link viz-tab-btn" data-id="${id}" data-tab="bar"><i class="fa-solid fa-chart-column me-1"></i>Столбчатая</button></li>
@@ -1960,3 +1985,5 @@ document.getElementById('downloadCleanedBtn').addEventListener('click', async ()
         btn.innerHTML = origHtml;
     }
 });
+
+initTooltips();
