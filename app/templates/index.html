@@ -6,10 +6,15 @@
     <title>{{ title }}</title>
     <link href="{{ url_for('static', path='css/bootstrap.min.css') }}" rel="stylesheet">
     <link href="{{ url_for('static', path='css/fontawesome.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', path='css/select2.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', path='css/select2-bootstrap-5-theme.min.css') }}" rel="stylesheet">
     <link href="{{ url_for('static', path='css/app.css') }}" rel="stylesheet">
     <script src="{{ url_for('static', path='js/sortable.min.js') }}"></script>
     <script src="{{ url_for('static', path='js/chart.umd.min.js') }}"></script>
     <script src="{{ url_for('static', path='js/chartjs-plugin-datalabels.min.js') }}"></script>
+    <script src="{{ url_for('static', path='js/jquery-3.7.1.min.js') }}"></script>
+    <script src="{{ url_for('static', path='js/select2.min.js') }}"></script>
+    <script src="{{ url_for('static', path='js/select2-ru.js') }}"></script>
 </head>
 <body class="ui-system-font wizard-body">
 
@@ -24,7 +29,7 @@
             <div class="wizard-track" id="wizardTrack">
 
                 <!-- ШАГ 1: Загрузка -->
-                <div class="wizard-step wizard-step-center" id="wizardStep0">
+                <div class="wizard-step" id="wizardStep0">
                     <div class="wizard-card">
                         <div class="wizard-step-header">
                             <span class="wizard-step-num">1</span>
@@ -42,17 +47,6 @@
                                 <p class="text-muted small mb-0">Поддерживаемые форматы: XLSX, CSV</p>
                                 <div id="fileListPreview" class="upload-file-list"></div>
                             </div>
-                            <div class="wizard-step-footer">
-                                <button type="button" class="btn btn-outline-secondary invisible" tabindex="-1" aria-hidden="true">
-                                    <i class="fa-solid fa-arrow-left me-1"></i>Назад
-                                </button>
-                                <div class="d-flex align-items-center gap-3">
-                                    <div class="spinner-border text-primary d-none" id="uploadSpinner" style="width:1.4rem;height:1.4rem;border-width:2px;"></div>
-                                    <button type="submit" class="btn btn-primary btn-lg px-5" id="uploadBtn" disabled>
-                                        Далее <i class="fa-solid fa-arrow-right ms-2"></i>
-                                    </button>
-                                </div>
-                            </div>
                         </form>
                     </div>
                 </div>
@@ -65,24 +59,13 @@
                             <h4 class="wizard-step-title">Выберите листы для анализа</h4>
                         </div>
                         <form id="sheetForm">
-                            <div class="form-check mb-2 pb-2 border-bottom">
+                            <div class="form-check pb-2">
                                 <input class="form-check-input" type="checkbox" id="selectAllSheets">
                                 <label class="form-check-label fw-bold" for="selectAllSheets">
-                                    <i class="fa-solid fa-check-double me-1"></i>Выбрать все листы
+                                    <i class="fa-solid fa-check-double me-1"></i>Все листы
                                 </label>
                             </div>
                             <div class="scrollable-box mb-1" id="sheetCheckboxesContainer" style="max-height:52vh;"></div>
-                            <div class="wizard-step-footer">
-                                <button type="button" class="btn btn-outline-secondary wizard-back-btn">
-                                    <i class="fa-solid fa-arrow-left me-1"></i>Назад
-                                </button>
-                                <div class="d-flex align-items-center gap-3">
-                                    <div class="spinner-border text-primary d-none" id="sheetSpinner" style="width:1.4rem;height:1.4rem;border-width:2px;"></div>
-                                    <button type="submit" class="btn btn-primary btn-lg px-5" id="processSheetsBtn" disabled>
-                                        <i class="fa-solid fa-broom me-1"></i>Продолжить <i class="fa-solid fa-arrow-right ms-2"></i>
-                                    </button>
-                                </div>
-                            </div>
                         </form>
                     </div>
                 </div>
@@ -95,31 +78,37 @@
                             <h4 class="wizard-step-title">Выбор вопросов для анализа</h4>
                         </div>
                         <div id="fileSelectContainer" class="mb-2" style="display:none">
+                            <label class="form-label small mb-1" for="fileSelectStep3">Вопросы из файла:</label>
                             <select class="form-select form-select-sm" id="fileSelectStep3"></select>
                         </div>
-                        <div id="selectAllQuestionsRow" class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom flex-wrap gap-2">
+                        <div id="selectAllQuestionsRow" class="d-flex justify-content-between align-items-center pb-2 flex-wrap gap-2">
                             <div class="form-check mb-0">
                                 <input class="form-check-input" type="checkbox" id="selectAllQuestions">
                                 <label class="form-check-label fw-bold" for="selectAllQuestions">
-                                    <i class="fa-solid fa-check-double me-1"></i>Выбрать все вопросы
+                                    <i class="fa-solid fa-check-double me-1"></i>Все вопросы
                                 </label>
                             </div>
-                            <div class="form-check form-switch mb-0 d-flex align-items-center">
+                            <div class="form-check form-switch mb-0 d-flex align-items-center gap-1">
                                 <input class="form-check-input me-2" type="checkbox" id="showHiddenCols" style="cursor:pointer;">
                                 <label class="form-check-label text-muted" for="showHiddenCols" style="cursor:pointer;">
                                     <i class="fa-solid fa-eye me-1"></i>Скрытые
                                 </label>
+                                <i class="fa-regular fa-circle-question text-muted"
+                                   data-bs-toggle="tooltip"
+                                   data-bs-placement="top"
+                                   title="Служебные столбцы, скрытые по умолчанию: идентификаторы, метки времени и прочие технические поля, которые не являются вопросами анкеты"
+                                   style="cursor:help; font-size:0.8rem;"></i>
                             </div>
                         </div>
-                        <div id="allQuestionsList" style="max-height:50vh;overflow-y:auto;overflow-x:auto;"></div>
-                        <div class="wizard-step-footer">
-                            <button type="button" class="btn btn-outline-secondary wizard-back-btn">
-                                <i class="fa-solid fa-arrow-left me-1"></i>Назад
-                            </button>
-                            <button type="button" class="btn btn-primary btn-lg px-5" id="toStep4Btn" disabled>
-                                Продолжить <i class="fa-solid fa-arrow-right ms-2"></i>
-                            </button>
+                        <div class="">
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control" id="questionsSearchInput" placeholder="Поиск вопроса...">
+                                <button class="btn btn-outline-secondary" type="button" id="questionsSearchClear" tabindex="-1" title="Очистить поиск">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                            </div>
                         </div>
+                        <div id="allQuestionsList" class="scrollable-box pt-0 pb-0 pr-0 pl-1" style="max-height:45vh;overflow-x:auto;"></div>
                     </div>
                 </div>
 
@@ -132,26 +121,16 @@
                         </div>
                         <form id="analyzeForm">
                             <div class="mb-4 p-3 border rounded bg-light" id="legendSettingsBlock">
-                                <h6 class="fw-bold mb-3 text-primary">
+                                <h6 class="fw-bold mb-3">
                                     <i class="fa-solid fa-palette me-2"></i>Настройки отображения файлов (Легенда):
                                 </h6>
                                 <div id="legendInputsContainer" class="d-flex flex-wrap gap-3"></div>
                             </div>
+                            <h6 class="fw-bold mb-3">Порядок вопросов (зажмите иконку "<i class="fa-solid fa-grip-lines"></i>" для передвижения):</h6>
                             <div class="list-group mb-1" id="sortableQuestionsList"
                                  style="min-height:80px;background:#f8f9fa;border:1px dashed #dee2e6;border-radius:5px;">
                                 <div class="p-3 text-center text-muted" id="emptySortablePlaceholder">
                                     <i class="fa-solid fa-hand-pointer me-1"></i>Выберите вопросы на шаге 3, чтобы они появились здесь
-                                </div>
-                            </div>
-                            <div class="wizard-step-footer">
-                                <button type="button" class="btn btn-outline-secondary wizard-back-btn">
-                                    <i class="fa-solid fa-arrow-left me-1"></i>Назад
-                                </button>
-                                <div class="d-flex align-items-center gap-3">
-                                    <div class="spinner-border text-primary d-none" id="analyzeSpinner" style="width:1.4rem;height:1.4rem;border-width:2px;"></div>
-                                    <button type="submit" class="btn btn-primary btn-lg px-5" id="analyzeBtn" disabled>
-                                        <i class="fa-solid fa-chart-bar me-1"></i>Построить отчёт <i class="fa-solid fa-arrow-right ms-2"></i>
-                                    </button>
                                 </div>
                             </div>
                         </form>
@@ -166,19 +145,11 @@
                             <h4 class="wizard-step-title">Предварительный просмотр</h4>
                         </div>
                         <div id="reportContent"></div>
-                        <div class="wizard-step-footer mt-3">
-                            <button type="button" class="btn btn-outline-secondary wizard-back-btn">
-                                <i class="fa-solid fa-arrow-left me-1"></i>К настройкам
-                            </button>
-                            <button type="button" class="btn btn-primary btn-lg px-5" id="toStep6Btn">
-                                <i class="fa-solid fa-robot me-1"></i>К ИИ-отчёту <i class="fa-solid fa-arrow-right ms-2"></i>
-                            </button>
-                        </div>
                     </div>
                 </div>
 
                 <!-- ШАГ 6: Экспорт для ИИ -->
-                <div class="wizard-step wizard-step-center" id="wizardStep5">
+                <div class="wizard-step" id="wizardStep5">
                     <div class="wizard-card">
                         <div class="wizard-step-header">
                             <span class="wizard-step-num">6</span>
@@ -192,20 +163,18 @@
                                 <i class="fa-solid fa-file-arrow-down me-2"></i>Скачать очищенные данные
                             </button>
                         </div>
-                        <div class="wizard-step-footer">
-                            <button type="button" class="btn btn-outline-secondary wizard-back-btn">
-                                <i class="fa-solid fa-arrow-left me-1"></i>Назад
-                            </button>
-                            <div></div>
-                        </div>
                     </div>
                 </div>
 
             </div><!-- /wizard-track -->
         </div><!-- /wizard-container -->
 
-        <!-- Нижняя панель: только индикатор шагов -->
+        <!-- Нижняя панель: кнопки навигации + индикатор шагов -->
         <div class="wizard-nav-bar">
+            <button type="button" class="btn btn-outline-secondary wizard-back-btn invisible" id="navBackBtn">
+                <i class="fa-solid fa-arrow-left me-2"></i>Назад
+            </button>
+
             <div class="step-dots">
                 <span class="step-dot active" data-step="0"></span>
                 <span class="step-dot" data-step="1"></span>
@@ -213,6 +182,50 @@
                 <span class="step-dot" data-step="3"></span>
                 <span class="step-dot" data-step="4"></span>
                 <span class="step-dot" data-step="5"></span>
+            </div>
+
+            <div class="d-flex align-items-center">
+                <!-- Шаг 1: загрузка -->
+                <div class="nav-step-fwd" data-fwd-step="0">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="spinner-border text-primary d-none" id="uploadSpinner" style="width:1.4rem;height:1.4rem;border-width:2px;"></div>
+                        <button type="submit" form="uploadForm" class="btn btn-primary px-4 nav-fwd-btn" id="uploadBtn" disabled>
+                            <i class="fa-solid fa-table-list me-1"></i>Выбрать листы <i class="fa-solid fa-arrow-right ms-2"></i>
+                        </button>
+                    </div>
+                </div>
+                <!-- Шаг 2: листы -->
+                <div class="nav-step-fwd d-none" data-fwd-step="1">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="spinner-border text-primary d-none" id="sheetSpinner" style="width:1.4rem;height:1.4rem;border-width:2px;"></div>
+                        <button type="submit" form="sheetForm" class="btn btn-primary px-4 nav-fwd-btn" id="processSheetsBtn" disabled>
+                            <i class="fa-solid fa-list-check me-1"></i>Выбрать вопросы <i class="fa-solid fa-arrow-right ms-2"></i>
+                        </button>
+                    </div>
+                </div>
+                <!-- Шаг 3: вопросы -->
+                <div class="nav-step-fwd d-none" data-fwd-step="2">
+                    <button type="button" class="btn btn-primary px-4 nav-fwd-btn" id="toStep4Btn" disabled>
+                        <i class="fa-solid fa-sliders me-1"></i>К настройке <i class="fa-solid fa-arrow-right ms-2"></i>
+                    </button>
+                </div>
+                <!-- Шаг 4: настройка -->
+                <div class="nav-step-fwd d-none" data-fwd-step="3">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="spinner-border text-primary d-none" id="analyzeSpinner" style="width:1.4rem;height:1.4rem;border-width:2px;"></div>
+                        <button type="submit" form="analyzeForm" class="btn btn-primary px-4 nav-fwd-btn" id="analyzeBtn" disabled>
+                            <i class="fa-solid fa-chart-bar me-1"></i>Построить отчёт <i class="fa-solid fa-arrow-right ms-2"></i>
+                        </button>
+                    </div>
+                </div>
+                <!-- Шаг 5: просмотр -->
+                <div class="nav-step-fwd d-none" data-fwd-step="4">
+                    <button type="button" class="btn btn-primary px-4 nav-fwd-btn" id="toStep6Btn">
+                        <i class="fa-solid fa-robot me-1"></i>К ИИ-отчёту <i class="fa-solid fa-arrow-right ms-2"></i>
+                    </button>
+                </div>
+                <!-- Шаг 6: нет кнопки вперёд -->
+                <div class="nav-step-fwd d-none" data-fwd-step="5"></div>
             </div>
         </div>
     </div><!-- /wizard-outer -->
