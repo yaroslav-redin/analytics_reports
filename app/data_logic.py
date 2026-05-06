@@ -136,10 +136,14 @@ def generate_report_data(upload_dir, request_data):
         if not all_answers:
             continue
 
+        q_file_keys = [k for k in file_labels if k in cfg.file_mapping]
+        q_file_labels = {k: file_labels[k] for k in q_file_keys}
+        q_file_colors = {k: file_colors[k] for k in q_file_keys}
+
         data_dicts = []
         for ans in all_answers:
             row = {"answer": ans, "counts": {}, "included": True}
-            row["counts"] = {f_name: file_counts.get(f_name, {}).get(ans, 0) for f_name in file_labels}
+            row["counts"] = {f_name: file_counts.get(f_name, {}).get(ans, 0) for f_name in q_file_keys}
             row["_total"] = sum(row["counts"].values())
             data_dicts.append(row)
 
@@ -149,9 +153,9 @@ def generate_report_data(upload_dir, request_data):
             "col_name": cfg.column,
             "viz_type": cfg.viz_type,
             "data": data_dicts,
-            "file_labels": file_labels,
-            "file_colors": file_colors,
-            "file_keys": list(file_labels.keys())
+            "file_labels": q_file_labels,
+            "file_colors": q_file_colors,
+            "file_keys": q_file_keys
         })
 
     return results

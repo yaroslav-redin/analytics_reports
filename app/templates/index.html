@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title }}</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', path='favicon.svg') }}">
     <link href="{{ url_for('static', path='css/bootstrap.min.css') }}" rel="stylesheet">
     <link href="{{ url_for('static', path='css/fontawesome.min.css') }}" rel="stylesheet">
     <link href="{{ url_for('static', path='css/select2.min.css') }}" rel="stylesheet">
@@ -20,7 +21,7 @@
 
     <nav class="navbar navbar-dark bg-primary shadow-sm" style="flex-shrink:0;">
         <div class="container-fluid px-4">
-            <a class="navbar-brand" href="/"><i class="fa-solid fa-chart-pie me-2"></i>МГУ им. Огарева | Аналитика</a>
+            <a class="navbar-brand" href="/"><i class="fa-solid fa-chart-pie me-2"></i>МГУ им. Огарева | Аналитика опросов</a>
         </div>
     </nav>
 
@@ -78,7 +79,7 @@
                             <h4 class="wizard-step-title">Выбор вопросов для анализа</h4>
                         </div>
                         <div id="fileSelectContainer" class="mb-2" style="display:none">
-                            <label class="form-label small mb-1" for="fileSelectStep3">Вопросы из файла:</label>
+                            <label class="form-label small mb-1" for="fileSelectStep3">Выбрать вопросы из файла:</label>
                             <select class="form-select form-select-sm" id="fileSelectStep3"></select>
                         </div>
                         <div id="selectAllQuestionsRow" class="d-flex justify-content-between align-items-center pb-2 flex-wrap gap-2">
@@ -144,7 +145,7 @@
                             <span class="wizard-step-num">5</span>
                             <h4 class="wizard-step-title">Предварительный просмотр</h4>
                         </div>
-                        <div id="reportContent"></div>
+                        <div id="reportContent" class="border rounded bg-light p-3"></div>
                     </div>
                 </div>
 
@@ -232,7 +233,7 @@
 
     <!-- Модалки -->
     <div class="modal fade" id="dataMappingModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+        <div class="modal-dialog modal-dialog-scrollable modal-xl modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title"><i class="fa-solid fa-code-merge me-2"></i>Соотнесение вопросов</h5>

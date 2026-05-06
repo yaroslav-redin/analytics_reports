@@ -143,9 +143,10 @@ document.getElementById('uploadForm').addEventListener('submit', async (e) => {
             window.uploadedFiles.forEach((file, fIdx) => {
                 container.innerHTML += `<div class="file-section-title">Файл ${fIdx + 1}: ${file.original_name}</div>`;
                 file.sheets.forEach(sheet => {
+                    const autoChecked = file.sheets.length === 1 ? ' checked' : '';
                     container.innerHTML += `
                         <div class="form-check ms-3">
-                            <input class="form-check-input sheet-checkbox" type="checkbox" value="${sheet}" data-filename="${file.filename}" id="s_${fIdx}_${sheet}">
+                            <input class="form-check-input sheet-checkbox" type="checkbox" value="${sheet}" data-filename="${file.filename}" id="s_${fIdx}_${sheet}"${autoChecked}>
                             <label class="form-check-label" for="s_${fIdx}_${sheet}">${sheet}</label>
                         </div>`;
                 });
@@ -255,6 +256,15 @@ function _renderQuestionsForFile(fileIdx) {
     });
 
     container.appendChild(inner);
+
+    const visibleItems = [...container.querySelectorAll('.q-item-container:not(.d-none)')];
+    if (visibleItems.length === 1) {
+        const cb = visibleItems[0].querySelector('.q-checkbox');
+        if (cb && !cb.checked) {
+            cb.checked = true;
+            addQuestionToSortable(cb.value, fileIdx);
+        }
+    }
 
     const total = container.querySelectorAll('.q-item-container:not(.d-none):not(.q-filtered)').length;
     const checked = container.querySelectorAll('.q-item-container:not(.d-none):not(.q-filtered) .q-checkbox:checked').length;
@@ -385,7 +395,7 @@ window.openMappingModal = function (qName) {
         const f = window.processedFiles[i];
         const currentMapped = mapping[f.clean_filename] || "";
 
-        let optionsHtml = `<option value="">-- Не выбрано (Исключить) --</option>`;
+        let optionsHtml = `<option value="">-- Не соотносить --</option>`;
         f.columns.forEach(c => {
             const sel = c.name === currentMapped ? 'selected' : '';
             optionsHtml += `<option value="${c.name}" ${sel}>${c.name}</option>`;
@@ -404,7 +414,7 @@ window.openMappingModal = function (qName) {
         width: '100%',
         dropdownParent: $(modalEl),
         language: 'ru',
-        placeholder: '-- Не выбрано (Исключить) --',
+        placeholder: '-- Не соотносить --',
         allowClear: true
     });
 
@@ -635,21 +645,48 @@ document.getElementById('manualRangesBtn').addEventListener('click', () => {
         const minVal = Math.min(...numericVals);
         const maxVal = Math.max(...numericVals);
         const step = minVal === maxVal ? 1 : (maxVal - minVal) / n;
-        preRanges = Array.from({ length: n }, (_, i) => ({
-            lo: Math.round(minVal + i * step),
-            hi: Math.round(i === n - 1 ? maxVal : minVal + (i + 1) * step)
-        }));
+        preRanges = Array.from({ length: n }, (_, i) => {
+            const loRaw = minVal + i * step;
+            const hiRaw = i === n - 1 ? maxVal : minVal + (i + 1) * step;
+            const isLast = i === n - 1;
+            const uvalsSorted = numericVals.filter(v => v >= loRaw && (isLast ? v <= hiRaw : v < hiRaw)).sort((a, b) => a - b);
+            const unique = [...new Set(uvalsSorted)];
+            const isSingle = unique.length === 1;
+            const lo = unique.length >= 1 ? Math.round(unique[0]) : Math.round(loRaw);
+            const hi = unique.length >= 2 ? Math.round(unique[unique.length - 1]) : (isSingle ? lo : Math.round(hiRaw));
+            return { lo, hi, isSingle, singleVal: isSingle ? lo : null };
+        });
     } else {
-        preRanges = Array.from({ length: n }, (_, i) => ({ lo: i, hi: i + 1 }));
+        preRanges = Array.from({ length: n }, (_, i) => ({ lo: i, hi: i + 1, isSingle: false, singleVal: null }));
     }
 
     document.getElementById('manualRangesBody').innerHTML = preRanges.map((r, i) => `
-        <div class="d-flex align-items-center gap-2 mb-2">
+        <div class="d-flex align-items-center gap-2 mb-2 manual-range-row">
             <span class="text-muted small" style="min-width:90px">Диапазон ${i + 1}:</span>
-            <input type="number" class="form-control form-control-sm manual-range-lo" value="${r.lo}" style="width:90px">
-            <span class="text-muted">—</span>
-            <input type="number" class="form-control form-control-sm manual-range-hi" value="${r.hi}" style="width:90px">
+            <input type="number" class="form-control form-control-sm manual-range-lo" value="${r.isSingle ? r.singleVal : r.lo}" style="width:90px">
+            <span class="text-muted manual-range-sep"${r.isSingle ? ' style="display:none"' : ''}>—</span>
+            <input type="number" class="form-control form-control-sm manual-range-hi" value="${r.hi}" style="width:90px${r.isSingle ? ';display:none' : ''}">
+            <div class="manual-range-single-wrap d-flex align-items-center gap-1 ms-2" style="visibility:${r.isSingle ? 'visible' : 'hidden'}">
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input manual-range-single-switch" type="checkbox" role="switch" id="singleSwitch_${i}"${r.isSingle ? ' checked' : ''}>
+                    <label class="form-check-label small text-muted" for="singleSwitch_${i}">Одно число</label>
+                </div>
+            </div>
         </div>`).join('');
+
+    document.querySelectorAll('#manualRangesBody .manual-range-row').forEach(row => {
+        const wrap = row.querySelector('.manual-range-single-wrap');
+        const sw = row.querySelector('.manual-range-single-switch');
+        const sep = row.querySelector('.manual-range-sep');
+        const hiEl = row.querySelector('.manual-range-hi');
+
+        row.addEventListener('mouseenter', () => { wrap.style.visibility = 'visible'; });
+        row.addEventListener('mouseleave', () => { if (!sw.checked) wrap.style.visibility = 'hidden'; });
+        sw.addEventListener('change', () => {
+            sep.style.display = sw.checked ? 'none' : '';
+            hiEl.style.display = sw.checked ? 'none' : '';
+        });
+    });
 
     new bootstrap.Modal(document.getElementById('manualRangesModal')).show();
 });
@@ -660,15 +697,17 @@ document.getElementById('applyManualRangesBtn').addEventListener('click', () => 
 
     const loInputs = [...document.querySelectorAll('#manualRangesBody .manual-range-lo')];
     const hiInputs = [...document.querySelectorAll('#manualRangesBody .manual-range-hi')];
+    const singleSwitches = [...document.querySelectorAll('#manualRangesBody .manual-range-single-switch')];
 
     loInputs.forEach(el => el.classList.remove('is-invalid'));
     hiInputs.forEach(el => el.classList.remove('is-invalid'));
 
-    const customRanges = loInputs.map((el, i) => ({
-        lo: parseFloat(el.value),
-        hi: parseFloat(hiInputs[i].value),
-        isLast: i === loInputs.length - 1
-    }));
+    const customRanges = loInputs.map((el, i) => {
+        const lo = parseFloat(el.value);
+        const isSingle = singleSwitches[i] && singleSwitches[i].checked;
+        const hi = isSingle ? lo : parseFloat(hiInputs[i].value);
+        return { lo, hi, isSingle, isLast: i === loInputs.length - 1 };
+    });
 
     if (customRanges.some(r => isNaN(r.lo) || isNaN(r.hi))) return;
 
@@ -681,7 +720,10 @@ document.getElementById('applyManualRangesBtn').addEventListener('click', () => 
         }
     }
     if (invalidIdx.size > 0) {
-        invalidIdx.forEach(i => { loInputs[i].classList.add('is-invalid'); hiInputs[i].classList.add('is-invalid'); });
+        invalidIdx.forEach(i => {
+            loInputs[i].classList.add('is-invalid');
+            if (!customRanges[i].isSingle) hiInputs[i].classList.add('is-invalid');
+        });
         showToast('Диапазоны пересекаются или неверно заданы. Исправьте выделенные поля.', 'danger');
         return;
     }
@@ -815,11 +857,11 @@ function _computeRangeMerge(id, numRanges) {
         const lo = minVal + i * step;
         const hi = i === numRanges - 1 ? maxVal : minVal + (i + 1) * step;
         return {
-            answer: `${Math.round(lo)} – ${Math.round(hi)}`,
             lo, hi, isLast: i === numRanges - 1,
             counts: Object.fromEntries(dataObj.file_keys.map(fk => [fk, 0])),
             included: true,
-            _total: 0
+            _total: 0,
+            _uniqueVals: new Set()
         };
     });
 
@@ -827,9 +869,17 @@ function _computeRangeMerge(id, numRanges) {
         const bucket = buckets.find(b => b.isLast ? v <= b.hi : v >= b.lo && v < b.hi) || buckets[buckets.length - 1];
         dataObj.file_keys.forEach(fk => { bucket.counts[fk] += row.counts[fk] || 0; });
         bucket._total += row._total;
+        bucket._uniqueVals.add(v);
     }
 
-    const data = buckets.map(({ answer, counts, included, _total }) => ({ answer, counts, included, _total }));
+    const data = buckets.map(({ lo, hi, counts, included, _total, _uniqueVals }) => {
+        const uvals = [..._uniqueVals].sort((a, b) => a - b);
+        let answer;
+        if (uvals.length === 0) answer = `${Math.round(lo)} – ${Math.round(hi)}`;
+        else if (uvals.length === 1) answer = String(Math.round(uvals[0]));
+        else answer = `${Math.round(uvals[0])} – ${Math.round(uvals[uvals.length - 1])}`;
+        return { answer, counts, included, _total };
+    });
 
     if (other.length > 0) {
         const otherRow = { answer: 'Другое', counts: Object.fromEntries(dataObj.file_keys.map(fk => [fk, 0])), included: true, _total: 0 };
@@ -861,11 +911,11 @@ function _computeRangeMergeCustom(id, customRanges) {
     if (numeric.length === 0) return null;
 
     const buckets = customRanges.map(r => ({
-        answer: `${r.lo} – ${r.hi}`,
         lo: r.lo, hi: r.hi, isLast: r.isLast,
         counts: Object.fromEntries(dataObj.file_keys.map(fk => [fk, 0])),
         included: true,
-        _total: 0
+        _total: 0,
+        _uniqueVals: new Set()
     }));
 
     const unmatched = [];
@@ -874,12 +924,20 @@ function _computeRangeMergeCustom(id, customRanges) {
         if (bucket) {
             dataObj.file_keys.forEach(fk => { bucket.counts[fk] += row.counts[fk] || 0; });
             bucket._total += row._total;
+            bucket._uniqueVals.add(v);
         } else {
             unmatched.push(row);
         }
     }
 
-    const data = buckets.map(({ answer, counts, included, _total }) => ({ answer, counts, included, _total }));
+    const data = buckets.map(({ lo, hi, counts, included, _total, _uniqueVals }) => {
+        const uvals = [..._uniqueVals].sort((a, b) => a - b);
+        let answer;
+        if (uvals.length === 0) answer = `${lo} – ${hi}`;
+        else if (uvals.length === 1) answer = String(Math.round(uvals[0]));
+        else answer = `${Math.round(uvals[0])} – ${Math.round(uvals[uvals.length - 1])}`;
+        return { answer, counts, included, _total };
+    });
 
     const leftover = [...other, ...unmatched];
     if (leftover.length > 0) {
