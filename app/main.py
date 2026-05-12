@@ -7,8 +7,9 @@ import pandas as pd
 import os
 
 from app.data_logic import clean_dataframe, generate_report_data, get_column_groups, is_system_column
-from app.schemas import ProcessSheetsRequest, AnalyzeRequest, ExportDocxRequest
+from app.schemas import ProcessSheetsRequest, AnalyzeRequest, ExportDocxRequest, AiReportRequest, AiGroupRequest
 from app.docx_gen import generate_docx
+from app.ai_report import generate_ai_report, group_answers_local, group_answers_api
 
 app = FastAPI(title="Система аналитики опросов МГУ им. Огарева")
 
@@ -93,6 +94,23 @@ async def process_sheets(request: ProcessSheetsRequest):
 async def analyze_data(request: AnalyzeRequest):
     results = generate_report_data(UPLOAD_DIR, request)
     return {"results": results}
+
+@app.post("/ai_group_answers")
+async def ai_group_answers(request: AiGroupRequest):
+    try:
+        fn = group_answers_api if request.backend == "api" else group_answers_local
+        groups = fn(request.answers, request.question_name)
+        return {"groups": groups}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
+
+@app.post("/generate_ai_report")
+async def ai_report(request: AiReportRequest):
+    try:
+        text = generate_ai_report([q.model_dump() for q in request.questions])
+        return {"report": text}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
 
 @app.post("/export_docx")
 async def export_docx(request: ExportDocxRequest):

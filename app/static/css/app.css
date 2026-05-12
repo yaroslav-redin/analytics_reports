@@ -1,3 +1,21 @@
+/* ===================== GLOBAL ===================== */
+html { height: 100%; }
+.navbar-no-shrink { flex-shrink: 0; }
+.spinner-app { width: 1.4rem; height: 1.4rem; border-width: 2px !important; }
+.scrollable-box-lg { max-height: 52vh; }
+.questions-scroll { max-height: 45vh; overflow-x: auto; }
+.fuzzy-preview-scroll { max-height: 220px; }
+.manual-ranges-scroll { max-height: 420px; overflow-y: auto; }
+.progress-xs { height: 8px; }
+.legend-color-swatch { width: 36px; height: 30px; padding: 1px 2px; cursor: pointer; }
+.legend-label-input { flex: 1; min-width: 200px; }
+.range-count-w { width: 80px; }
+.cursor-pointer { cursor: pointer; }
+.help-icon-sm { cursor: help; font-size: 0.8rem; }
+.color-input-sm { width: 28px; height: 28px; padding: 1px 2px; cursor: pointer; }
+.input-w-70 { width: 70px; }
+.row-toggle-visible { opacity: 1; }
+
 /* ===================== WIZARD LAYOUT ===================== */
 .wizard-body {
     height: 100vh;
@@ -69,6 +87,8 @@
     justify-content: center;
 }
 .wizard-step-title { margin: 0; font-weight: 600; font-size: 1.15rem; }
+.step-help-icon { color: #ced4da; font-size: 1.15rem; cursor: default; transition: color 0.15s; flex-shrink: 0; }
+.step-help-icon:hover { color: #0d6efd; }
 .wizard-step-footer {
     display: flex;
     justify-content: space-between;
@@ -131,6 +151,13 @@
 .step-dot.active { background: #0d6efd; width: 28px; }
 
 /* ===================== EXISTING ===================== */
+.report-section-card { border: 1px solid #dee2e6; border-radius: 10px; overflow: hidden; }
+.report-section-header { background: #f0f4ff; padding: 0.6rem 1.25rem; font-weight: 600; font-size: 1.05rem; color: #1a3a6b; border-bottom: 1px solid #d0d9f0; display: flex; align-items: center; gap: 0.5rem; }
+.report-section-collapse-btn { background: transparent; border: none; color: #7b9fd4; cursor: pointer; padding: 0; font-size: 0.8rem; flex-shrink: 0; line-height: 1; transition: color 0.15s; }
+.report-section-collapse-btn:hover { color: #0d6efd; }
+.report-section-wrapper { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 0.18s ease-in; }
+.report-section-wrapper.collapsed { grid-template-rows: 0fr; }
+.report-section-body { min-height: 0; overflow: hidden; padding: 1.25rem 1.25rem 0.25rem; }
 .result-item { border-bottom: 2px solid #eee; padding-bottom: 30px; margin-bottom: 30px; }
 .scrollable-box { max-height: 250px; overflow-y: auto; border: 1px solid #dee2e6; padding: 15px; border-radius: 5px; background: #fff; }
 .drag-handle { cursor: grab; font-size: 1.2rem; color: #888; }
@@ -142,11 +169,16 @@
 #reportContent table { font-size: 12pt; border-collapse: collapse; width: 100%; }
 .ui-system-font { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size: 1rem; }
 
-.control-col { width: 45px; border: none !important; background-color: transparent !important; padding: 0 !important; vertical-align: middle; }
+.control-col { width: 68px; border: none !important; background-color: transparent !important; padding: 0 !important; vertical-align: middle; }
 .table-custom-border > :not(caption) > * > .control-col { border-width: 0; background: transparent; }
 
-.row-toggle-container { opacity: 0; transition: opacity 0.2s ease-in-out; display: flex; justify-content: center; }
+.row-toggle-container { opacity: 0; transition: opacity 0.2s ease-in-out; display: flex; justify-content: center; align-items: center; gap: 4px; }
+.btn-merge-answer { width: 18px; height: 18px; border-radius: 50%; border: 1px solid #0d6efd; background: transparent; color: #0d6efd; font-size: 11px; line-height: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; flex-shrink: 0; align-self: center; }
+.btn-merge-answer:hover { background: #0d6efd; color: #fff; }
+.add-row-btn { position: absolute; bottom: -9px; left: 50%; transform: translateX(-50%); z-index: 5; border: none; background: none; color: #195787; font-size: 14px; line-height: 1; cursor: pointer; padding: 0; opacity: 0; transition: opacity 0.15s; }
+.add-row-btn:hover { color: #146c43; }
 tr:hover .row-toggle-container, tr.row-excluded .row-toggle-container { opacity: 1; }
+tr:hover .add-row-btn { opacity: 1; }
 th:hover .row-toggle-container, th.col-excluded .row-toggle-container { opacity: 1; }
 .row-excluded { text-decoration: line-through; text-decoration-thickness: 2px; text-decoration-color: #868e96; color: #6c757d; }
 .row-excluded > td, .row-excluded > th { background-color: #e9ecef !important; }
@@ -159,6 +191,45 @@ th:hover .row-toggle-container, th.col-excluded .row-toggle-container { opacity:
 .pie-container { max-width: 500px; margin: 0 auto; }
 .settings-btn { cursor: pointer; color: #6c757d; transition: color 0.2s; font-size: 1.2rem; }
 .settings-btn:hover { color: #0d6efd; }
+
+/* ===================== STEP 4: СТРУКТУРА ОТЧЁТА ===================== */
+.step4-body { display: flex; gap: 16px; height: calc(74vh - 130px); min-height: 320px; }
+.step4-left { width: 55%; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.step4-right { width: 45%; display: flex; flex-direction: column; min-height: 0; }
+.step4-left-scroll { flex: 1; overflow-y: auto; min-height: 0; }
+.step4-right-list { flex: 1; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 6px; padding: 4px 6px; background: #fff; }
+
+.section-card { border: 1px solid #dee2e6; border-radius: 8px; background: #fff; }
+.section-collapse-btn { background: transparent; border: none; color: #adb5bd; cursor: pointer; padding: 0; font-size: 0.8rem; flex-shrink: 0; line-height: 1; transition: color 0.15s; }
+.section-collapse-btn:hover { color: #0d6efd; }
+.section-questions-wrapper { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 0.18s ease-in; }
+.section-questions-wrapper.collapsed { grid-template-rows: 0fr; }
+.section-questions-list { min-height: 0; overflow: hidden; border-radius: 5px; border: 1px dashed transparent; transition: border-color 0.15s, background 0.15s; }
+.section-questions-list.drag-over { border-color: #0d6efd; background: #e7f3ff; }
+.section-empty-hint { font-size: 0.8rem; color: #adb5bd; padding: 6px 4px; text-align: center; }
+
+.section-question-item { display: flex; align-items: center; gap: 6px; padding: 4px 2px; border-bottom: 1px solid #f0f0f0; }
+.section-question-item.q-item-viz { background: rgba(111, 66, 193, 0.15); }
+.section-question-item.q-item-missing { background: rgba(220, 53, 69, 0.13); }
+.section-question-item:last-child { border-bottom: none; }
+.section-q-drag { cursor: grab; color: #adb5bd; flex-shrink: 0; font-size: 0.85rem; }
+.section-q-drag:active { cursor: grabbing; }
+.section-q-viz-btn { background: transparent; border: 1px solid #6f42c1; color: #6f42c1; border-radius: 4px; padding: 1px 5px; font-size: 0.75rem; cursor: pointer; flex-shrink: 0; opacity: 0; transition: background 0.15s, color 0.15s, opacity 0.15s; }
+.section-q-viz-btn.active { background: #6f42c1; color: #fff; opacity: 1; }
+.section-question-item:hover .section-q-viz-btn { opacity: 1; }
+.section-q-mapping-btn { opacity: 0; transition: opacity 0.15s; background: transparent; border: none; color: #6c757d; cursor: pointer; padding: 0 2px; font-size: 0.8rem; flex-shrink: 0; }
+.section-question-item:hover .section-q-mapping-btn { opacity: 1; }
+.section-q-mapping-btn.text-danger { opacity: 1; }
+.section-q-mapping-btn:hover { color: #0d6efd; }
+.section-q-mapping-btn.text-danger:hover { color: #a71d2a; }
+.section-q-remove-btn { opacity: 0; transition: opacity 0.15s; background: transparent; border: none; color: #dc3545; font-size: 1rem; font-weight: 700; line-height: 1; cursor: pointer; padding: 0 2px; flex-shrink: 0; }
+.section-question-item:hover .section-q-remove-btn { opacity: 1; }
+.section-q-remove-btn:hover { color: #a71d2a; }
+
+.available-q-item { display: flex; align-items: center; gap: 8px; padding: 5px 4px; border-bottom: 1px solid #f0f0f0; border-radius: 4px; user-select: none; cursor: pointer; transition: background 0.15s; }
+.available-q-item:last-child { border-bottom: none; }
+.available-q-item:hover { background: #f1f3f5; }
+.available-q-item.dragging { opacity: 0.35; }
 
 .file-section-title { background: #e9ecef; padding: 5px 10px; border-radius: 5px; font-weight: bold; margin-top: 10px; margin-bottom: 5px; }
 .missing-warning { cursor: help; color: #dc3545; font-weight: bold; }

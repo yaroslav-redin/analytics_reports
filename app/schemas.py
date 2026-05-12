@@ -36,3 +36,11 @@ class ExportQuestion(BaseModel):
 
 class ExportDocxRequest(BaseModel):
     questions: List[ExportQuestion]
+
+class AiReportRequest(BaseModel):
+    questions: List[ExportQuestion]
+
+class AiGroupRequest(BaseModel):
+    answers: List[str]
+    question_name: str
+    backend: str = "local"

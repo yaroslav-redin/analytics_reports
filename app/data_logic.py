@@ -133,9 +133,6 @@ def generate_report_data(upload_dir, request_data):
                 file_counts[f_name] = counts
                 all_answers.update(counts.keys())
 
-        if not all_answers:
-            continue
-
         q_file_keys = [k for k in file_labels if k in cfg.file_mapping]
         q_file_labels = {k: file_labels[k] for k in q_file_keys}
         q_file_colors = {k: file_colors[k] for k in q_file_keys}

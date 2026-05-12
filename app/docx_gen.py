@@ -2,8 +2,6 @@ import io
 from docx import Document
 from docx.shared import Pt, Cm
 
-#ФУНКЦИЯ ЭКСПОРТА (Редактировать тут)
-
 def _p(doc, text, bold=False, size=12, space_before=0, space_after=3):
     para = doc.add_paragraph()
     para.paragraph_format.space_before = Pt(space_before)
