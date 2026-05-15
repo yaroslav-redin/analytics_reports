@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 
 class ProcessSheetFile(BaseModel):
@@ -22,6 +22,11 @@ class ExportRow(BaseModel):
     answer: str
     counts: Dict[str, int]
 
+class SectionInfo(BaseModel):
+    name: str
+    description: str = ""
+    color: str = ""
+
 class ExportQuestion(BaseModel):
     table_num: int
     question_name: str
@@ -33,14 +38,15 @@ class ExportQuestion(BaseModel):
     rows: List[ExportRow]
     file_totals: Dict[str, int]
     show_total: bool
+    section: Optional[SectionInfo] = None
+    viz_tab: Optional[str] = None        # 'table' | 'bar' | 'stacked' | 'pie' | None
+    chart_direction: str = 'y'           # 'y' = column, 'x' = horizontal bar
+    show_legend: bool = True
+    hidden_col: str = 'none'             # 'none' | 'count' | 'percent'
 
 class ExportDocxRequest(BaseModel):
-    questions: List[ExportQuestion]
-
-class AiReportRequest(BaseModel):
     questions: List[ExportQuestion]
 
 class AiGroupRequest(BaseModel):
     answers: List[str]
     question_name: str
-    backend: str = "local"

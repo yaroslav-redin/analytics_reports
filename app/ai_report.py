@@ -1,11 +1,13 @@
 import os
 import json
 import re
-import ollama
+import time
+from openai import OpenAI
 from dotenv import load_dotenv
-from mistralai.client import Mistral
 
 load_dotenv()
+
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
 
 
 def _extract_json(text: str) -> dict:
@@ -51,99 +53,23 @@ def _parse_group_response(raw: str, answers: list[str]) -> list[dict]:
     return [{"canonical": canon, "members": members} for canon, members in groups.items()]
 
 
-def group_answers_local(answers: list[str], question_name: str) -> list[dict]:
+def group_answers_openrouter(answers: list[str], question_name: str) -> list[dict]:
+    key = os.getenv("OPENROUTER_API_KEY", "")
+    if not key:
+        raise ValueError("OPENROUTER_API_KEY не задан в .env")
     prompt = _build_group_prompt(answers, question_name)
-    response = ollama.chat(
-        model="mistral",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return _parse_group_response(response.message.content.strip(), answers)
-
-
-def group_answers_api(answers: list[str], question_name: str) -> list[dict]:
-    api_key = os.getenv("MISTRAL_API_KEY")
-    if not api_key:
-        raise ValueError("MISTRAL_API_KEY не задан в .env")
-    prompt = _build_group_prompt(answers, question_name)
-    client = Mistral(api_key=api_key)
-    response = client.chat.complete(
-        model="mistral-small-latest",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return _parse_group_response(response.choices[0].message.content.strip(), answers)
-
-
-def _format_survey_data(questions: list[dict]) -> str:
-    lines = []
-    for q in questions:
-        lines.append(f"\nВопрос {q['table_num']}: {q['question_name']}")
-
-        file_keys = q['file_keys']
-        file_labels = q['file_labels']
-        file_totals = q['file_totals']
-
-        if len(file_keys) == 1:
-            fk = file_keys[0]
-            total = file_totals.get(fk, 0)
-            lines.append(f"  {'Вариант ответа':<45} {'Кол-во':>7} {'%':>6}")
-            lines.append("  " + "-" * 60)
-            for row in q['rows']:
-                count = row['counts'].get(fk, 0)
-                pct = f"{count / total * 100:.1f}%" if total else "0%"
-                ans = row['answer'][:45]
-                lines.append(f"  {ans:<45} {count:>7} {pct:>6}")
-            lines.append(f"  {'Всего ответивших:':<45} {total:>7}")
-        else:
-            short_labels = {fk: file_labels.get(fk, fk)[:12] for fk in file_keys}
-            header = f"  {'Вариант ответа':<40}"
-            for fk in file_keys:
-                header += f" | {short_labels[fk]:>14}"
-            lines.append(header)
-            lines.append("  " + "-" * (40 + 17 * len(file_keys)))
-            for row in q['rows']:
-                row_str = f"  {row['answer'][:40]:<40}"
-                for fk in file_keys:
-                    count = row['counts'].get(fk, 0)
-                    total = file_totals.get(fk, 0)
-                    pct = f"{count / total * 100:.0f}%" if total else "0%"
-                    row_str += f" | {count:>6}({pct:>4})"
-                lines.append(row_str)
-            total_str = f"  {'Всего ответивших:':<40}"
-            for fk in file_keys:
-                total_str += f" | {file_totals.get(fk, 0):>14}"
-            lines.append(total_str)
-
-    return "\n".join(lines)
-
-
-def generate_ai_report(questions: list[dict]) -> str:
-    api_key = os.getenv("MISTRAL_API_KEY")
-    if not api_key:
-        raise ValueError("MISTRAL_API_KEY не задан в .env")
-
-    survey_text = _format_survey_data(questions)
-
-    has_multiple_groups = any(len(q['file_keys']) > 1 for q in questions)
-    comparison_note = (
-        "Сравни ответы между группами, выдели значимые различия."
-        if has_multiple_groups else ""
-    )
-
-    prompt = (
-        "Ты — аналитик социологических опросов. "
-        "Проанализируй данные опроса и напиши аналитический отчёт на русском языке.\n\n"
-        f"Данные опроса:\n{survey_text}\n\n"
-        "Требования к отчёту:\n"
-        "1. Для каждого вопроса: опиши распределение ответов, выдели доминирующие варианты.\n"
-        f"2. {comparison_note}\n"
-        "3. В конце — общие выводы.\n"
-        "Пиши профессионально, без лишних повторений, как для официального аналитического документа."
-    )
-
-    client = Mistral(api_key=api_key)
-    response = client.chat.complete(
-        model="mistral-small-latest",
-        messages=[{"role": "user", "content": prompt}]
-    )
-
-    return response.choices[0].message.content
+    client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=key)
+    for attempt in range(5):
+        try:
+            response = client.chat.completions.create(
+                model=OPENROUTER_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=2000,
+                temperature=0.3,
+            )
+            return _parse_group_response(response.choices[0].message.content.strip(), answers)
+        except Exception as e:
+            if "429" in str(e) and attempt < 4:
+                time.sleep(15 * (attempt + 1))
+            else:
+                raise

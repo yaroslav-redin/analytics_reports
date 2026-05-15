@@ -36,11 +36,16 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
     const configs = [];
     (window.reportSections || []).forEach(sec => {
         sec.questions.forEach(q => {
-            if (q.visualize) configs.push({ column: q.qName, viz_type: ALL_VIZ, file_mapping: window.questionMapping[q.qName] });
+            configs.push({ column: q.qName, viz_type: ALL_VIZ, file_mapping: window.questionMapping[q.qName] });
         });
     });
 
     if (!configs.length) {
+        showToast('Нет вопросов в разделах. Добавьте вопросы на шаге 4.', 'warning');
+        return;
+    }
+    const hasViz = (window.reportSections || []).some(sec => sec.questions.some(q => q.visualize));
+    if (!hasViz) {
         showToast('Нет вопросов для визуализации. Нажмите кнопку с иконкой диаграммы у нужных вопросов в разделах (шаг 4).', 'warning');
         return;
     }
@@ -171,27 +176,49 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
 
             (window.reportSections || []).forEach(sec => {
                 const vizQuestions = sec.questions.filter(q => q.visualize);
-                if (!vizQuestions.length) return;
+                let sectionBody = null;
 
-                const rscCollapsed = window._collapsedReportSections && window._collapsedReportSections.has(sec.id);
-                reportContent.insertAdjacentHTML('beforeend', `
-                    <div class="report-section-card mb-4">
-                        <div class="report-section-header">
-                            <i class="fa-solid fa-layer-group me-2"></i>
-                            <span class="flex-grow-1">${_escHtml(sec.name)}</span>
-                            <button type="button" class="report-section-collapse-btn" data-section-id="${_escAttr(sec.id)}" title="${rscCollapsed ? 'Развернуть' : 'Свернуть'}">
-                                <i class="fa-solid ${rscCollapsed ? 'fa-chevron-up' : 'fa-chevron-down'}"></i>
-                            </button>
-                        </div>
-                        <div class="report-section-wrapper${rscCollapsed ? ' collapsed' : ''}" data-section-id="${_escAttr(sec.id)}">
-                            <div class="report-section-body" id="rsc_${_escAttr(sec.id)}"></div>
-                        </div>
-                    </div>`);
-                const sectionBody = document.getElementById(`rsc_${sec.id}`);
+                if (vizQuestions.length) {
+                    const rscCollapsed = window._collapsedReportSections && window._collapsedReportSections.has(sec.id);
+                    reportContent.insertAdjacentHTML('beforeend', `
+                        <div class="report-section-card mb-4">
+                            <div class="report-section-header">
+                                <i class="fa-solid fa-layer-group me-2"></i>
+                                <span class="flex-grow-1">${_escHtml(sec.name)}</span>
+                                <button type="button" class="report-section-collapse-btn" data-section-id="${_escAttr(sec.id)}" title="${rscCollapsed ? 'Развернуть' : 'Свернуть'}">
+                                    <i class="fa-solid ${rscCollapsed ? 'fa-chevron-up' : 'fa-chevron-down'}"></i>
+                                </button>
+                            </div>
+                            <div class="report-section-wrapper${rscCollapsed ? ' collapsed' : ''}" data-section-id="${_escAttr(sec.id)}">
+                                <div class="report-section-body" id="rsc_${_escAttr(sec.id)}"></div>
+                            </div>
+                        </div>`);
+                    sectionBody = document.getElementById(`rsc_${sec.id}`);
+                }
 
-                vizQuestions.forEach(() => {
+                sec.questions.forEach(q => {
                     const item = data.results[resultIdx++];
-                    if (item) renderItem(item, sectionBody);
+                    if (!item) return;
+                    if (q.visualize && sectionBody) {
+                        renderItem(item, sectionBody);
+                    } else {
+                        const id = `item_${globalItemIdx++}`;
+                        window.renderedTabs[id] = { bar: false, stacked: false, pie: false };
+                        window.chartsData[id] = true;
+                        window.stackedChartsData[id] = true;
+                        window.pieChartsData[id] = true;
+                        window.appData[id] = {
+                            question_name: item.col_name,
+                            options: { showTotal: true, highlightTop: false, topN: 1, chartDirection: 'y', highlightColor: '#dc3545', hiddenCol: 'none', tableVertical: false, showLegend: item.file_keys.length > 1 },
+                            headers: { h1: 'Ответ', h2: 'Кол-во ответивших', h3: '% от числа ответивших' },
+                            data: item.data,
+                            file_keys: item.file_keys,
+                            file_labels: item.file_labels,
+                            file_colors: item.file_colors,
+                            pieColors: [...PIE_COLORS],
+                            barColors: [...PIE_COLORS]
+                        };
+                    }
                 });
             });
 

@@ -6,6 +6,5 @@ pandas
 openpyxl
 pyarrow
 python-docx
-mistralai
 python-dotenv
-ollama
+openai

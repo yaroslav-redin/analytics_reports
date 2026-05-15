@@ -2,14 +2,17 @@ from fastapi import FastAPI, Request, UploadFile, File
 from typing import List
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, StreamingResponse
 import pandas as pd
 import os
+import json
+import asyncio
+import threading
 
 from app.data_logic import clean_dataframe, generate_report_data, get_column_groups, is_system_column
-from app.schemas import ProcessSheetsRequest, AnalyzeRequest, ExportDocxRequest, AiReportRequest, AiGroupRequest
-from app.docx_gen import generate_docx
-from app.ai_report import generate_ai_report, group_answers_local, group_answers_api
+from app.schemas import ProcessSheetsRequest, AnalyzeRequest, ExportDocxRequest, AiGroupRequest
+from app.docx_gen import generate_analysis_docx  # noqa: F401 used inside thread
+from app.ai_report import group_answers_openrouter
 
 app = FastAPI(title="Система аналитики опросов МГУ им. Огарева")
 
@@ -98,28 +101,45 @@ async def analyze_data(request: AnalyzeRequest):
 @app.post("/ai_group_answers")
 async def ai_group_answers(request: AiGroupRequest):
     try:
-        fn = group_answers_api if request.backend == "api" else group_answers_local
-        groups = fn(request.answers, request.question_name)
+        groups = group_answers_openrouter(request.answers, request.question_name)
         return {"groups": groups}
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": str(e)})
 
-@app.post("/generate_ai_report")
-async def ai_report(request: AiReportRequest):
-    try:
-        text = generate_ai_report([q.model_dump() for q in request.questions])
-        return {"report": text}
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"message": str(e)})
+@app.post("/export_docx_stream")
+async def export_docx_stream(request: ExportDocxRequest):
+    import base64
+    questions = [q.model_dump() for q in request.questions]
 
-@app.post("/export_docx")
-async def export_docx(request: ExportDocxRequest):
-    try:
-        docx_bytes = generate_docx([q.model_dump() for q in request.questions])
-        return Response(
-            content=docx_bytes,
-            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            headers={"Content-Disposition": "attachment; filename=report.docx"}
-        )
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"message": f"Ошибка генерации документа: {str(e)}"})
+    async def event_generator():
+        loop = asyncio.get_event_loop()
+        queue = asyncio.Queue()
+
+        def progress_cb(current, total, label):
+            loop.call_soon_threadsafe(
+                queue.put_nowait,
+                {"type": "progress", "current": current, "total": total, "label": label}
+            )
+
+        def run_generate():
+            try:
+                analysis_bytes = generate_analysis_docx(
+                    questions,
+                    progress_callback=progress_cb,
+                )
+                loop.call_soon_threadsafe(queue.put_nowait, {
+                    "type": "done",
+                    "file": base64.b64encode(analysis_bytes).decode()
+                })
+            except Exception as e:
+                loop.call_soon_threadsafe(queue.put_nowait, {"type": "error", "message": str(e)})
+
+        threading.Thread(target=run_generate, daemon=True).start()
+
+        while True:
+            msg = await queue.get()
+            yield f"data: {json.dumps(msg, ensure_ascii=False)}\n\n"
+            if msg["type"] in ("done", "error"):
+                break
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")

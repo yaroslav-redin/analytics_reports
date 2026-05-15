@@ -41,9 +41,16 @@ function _fuzzyShowPreview(data, origAnswers) {
     document.getElementById('fuzzyConfirmBtn').disabled = false;
     const html = data.map(row => {
         const from = origAnswers && origAnswers[row.answer];
-        const merged = from && from.length
-            ? ` <small class="text-muted">(+ ${from.slice(0, 3).map(a => `«${_escHtml(a)}»`).join(', ')}${from.length > 3 ? ` и ещё ${from.length - 3}` : ''})</small>`
-            : '';
+        let merged = '';
+        if (from && from.length) {
+            const visible = from.slice(0, 3).map(a => `«${_escHtml(a)}»`).join(', ');
+            const rest = from.slice(3);
+            const moreHtml = rest.length > 0
+                ? `, <span class="fuzzy-more-toggle text-primary" style="cursor:pointer">и ещё ${rest.length}</span>`
+                  + `<span class="fuzzy-more-items d-none">, ${rest.map(a => `«${_escHtml(a)}»`).join(', ')}</span>`
+                : '';
+            merged = ` <small class="text-muted">(+ ${visible}${moreHtml})</small>`;
+        }
         return `<div class="d-flex justify-content-between align-items-baseline py-1 border-bottom">
             <span>${_escHtml(row.answer)}${merged}</span>
             <span class="badge bg-secondary ms-2 flex-shrink-0">${row._total}</span>
@@ -52,6 +59,13 @@ function _fuzzyShowPreview(data, origAnswers) {
     document.getElementById('fuzzyPreviewContent').innerHTML = html || '<span class="text-muted">Нет данных.</span>';
     document.getElementById('fuzzyPreviewArea').classList.remove('d-none');
 }
+
+document.getElementById('fuzzyPreviewContent').addEventListener('click', e => {
+    const toggle = e.target.closest('.fuzzy-more-toggle');
+    if (!toggle) return;
+    toggle.classList.add('d-none');
+    toggle.nextElementSibling.classList.remove('d-none');
+});
 
 window.confirmFuzzyMapping = function(id) {
     _fuzzyTargetId = id;
@@ -228,7 +242,6 @@ document.getElementById('fuzzyConfirmBtn').addEventListener('click', () => {
 document.getElementById('fuzzyTabPane').addEventListener('click', async e => {
     const btn = e.target.closest('[data-ai-backend]');
     if (!btn || !_fuzzyTargetId) return;
-    const backend = btn.dataset.aiBackend;
 
     const dataObj = window.appData[_fuzzyTargetId];
     if (!dataObj || dataObj.data.length === 0) return;
@@ -243,7 +256,7 @@ document.getElementById('fuzzyTabPane').addEventListener('click', async e => {
         const resp = await fetch('/ai_group_answers', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ answers, question_name: questionName, backend })
+            body: JSON.stringify({ answers, question_name: questionName })
         });
         const result = await resp.json();
         progressModal.hide();

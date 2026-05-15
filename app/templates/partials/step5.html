@@ -1,27 +1,35 @@
-<!-- ШАГ 6: ИИ-аналитика и экспорт -->
+<!-- ШАГ 6: Генерация ИИ-отчёта -->
 <div class="wizard-step" id="wizardStep5">
     <div class="wizard-card">
         <div class="wizard-step-header">
             <span class="wizard-step-num">6</span>
-            <h4 class="wizard-step-title">ИИ-аналитика и экспорт</h4>
-            <span class="step-help-icon ms-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Получите автоматический анализ результатов опроса с помощью ИИ и экспортируйте готовый отчёт в формат Word (.docx)."><i class="fa-regular fa-circle-question"></i></span>
+            <h4 class="wizard-step-title">Генерация ИИ-отчёта</h4>
+            <span class="step-help-icon ms-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Генерация аналитического текста через OpenRouter API."><i class="fa-regular fa-circle-question"></i></span>
         </div>
-        <div class="d-flex gap-3 justify-content-center mb-4">
-            <button type="button" class="btn btn-primary btn-lg px-4" id="generateAiReportBtn">
-                <i class="fa-solid fa-robot me-2"></i>Сгенерировать ИИ-анализ
-            </button>
-            <button type="button" class="btn btn-success btn-lg px-4" id="downloadCleanedBtn">
-                <i class="fa-solid fa-file-word me-2"></i>Скачать отчёт (.docx)
-            </button>
-        </div>
-        <div id="aiReportSection" class="d-none">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="fw-semibold">Аналитический отчёт (Mistral AI)</span>
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="copyAiReportBtn">
-                    <i class="fa-solid fa-copy me-1"></i>Копировать
+        <p class="text-muted mb-4">
+            Нажмите кнопку, чтобы сгенерировать аналитический отчёт и скачать его в формате Word.
+        </p>
+
+        <div class="d-flex flex-column gap-3" style="max-width:520px;margin:0 auto;">
+
+            <div class="p-3">
+                <button type="button" class="btn btn-primary w-100" id="downloadApiBtn">
+                    <i class="fa-solid fa-file-arrow-down me-2"></i>Скачать отчёт
                 </button>
             </div>
-            <textarea id="aiReportText" class="form-control font-monospace" rows="20" readonly></textarea>
+
+            <!-- Прогресс -->
+            <div id="exportProgressContainer" class="d-none">
+                <div class="progress mb-1" style="height:18px;border-radius:8px;">
+                    <div id="exportProgressBar"
+                         class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                         role="progressbar" style="width:0%;font-size:0.72rem;"></div>
+                </div>
+                <small id="exportProgressLabel" class="text-muted d-block text-center text-truncate"></small>
+                <small id="exportTimerLabel" class="text-muted d-block text-center mt-1"
+                       style="font-variant-numeric:tabular-nums;letter-spacing:0.05em;">00:00</small>
+            </div>
+
         </div>
     </div>
 </div>
