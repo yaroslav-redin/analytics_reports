@@ -50,7 +50,7 @@ document.getElementById('uploadForm').addEventListener('submit', async (e) => {
         const response = await fetch('/upload', { method: 'POST', body: formData });
         const data = await response.json();
         if (response.ok) {
-            window.uploadedFiles = data.files;
+            window.uploadedFiles = data.files.sort((a, b) => b.original_name.localeCompare(a.original_name, 'ru'));
             const container = document.getElementById('sheetCheckboxesContainer');
             container.innerHTML = '';
 
@@ -65,6 +65,10 @@ document.getElementById('uploadForm').addEventListener('submit', async (e) => {
                         </div>`);
                 });
             });
+
+            const totalSheets = document.querySelectorAll('.sheet-checkbox').length;
+            const checkedSheets = document.querySelectorAll('.sheet-checkbox:checked').length;
+            document.getElementById('selectAllSheets').checked = (totalSheets === checkedSheets && totalSheets > 0);
 
             goToStep(1);
             updateSheetBtn();

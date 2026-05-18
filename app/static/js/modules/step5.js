@@ -4,19 +4,41 @@ window.stackedChartsData = {};
 window.pieChartsData = {};
 window.renderedTabs = {};
 
-// Collapse report sections
+// Collapse report sections and simple question items
 document.getElementById('reportContent').addEventListener('click', e => {
     const colBtn = e.target.closest('.report-section-collapse-btn');
-    if (!colBtn) return;
-    const secId = colBtn.dataset.sectionId;
-    const wrapper = document.querySelector(`.report-section-wrapper[data-section-id="${secId}"]`);
-    if (!wrapper) return;
-    const isNowCollapsed = wrapper.classList.toggle('collapsed');
-    colBtn.querySelector('i').className = `fa-solid ${isNowCollapsed ? 'fa-chevron-up' : 'fa-chevron-down'}`;
-    colBtn.title = isNowCollapsed ? 'Развернуть' : 'Свернуть';
-    if (!window._collapsedReportSections) window._collapsedReportSections = new Set();
-    if (isNowCollapsed) window._collapsedReportSections.add(secId);
-    else window._collapsedReportSections.delete(secId);
+    if (colBtn) {
+        const secId = colBtn.dataset.sectionId;
+        const wrapper = document.querySelector(`.report-section-wrapper[data-section-id="${secId}"]`);
+        if (!wrapper) return;
+        const isNowCollapsed = wrapper.classList.toggle('collapsed');
+        colBtn.querySelector('i').className = `fa-solid ${isNowCollapsed ? 'fa-chevron-up' : 'fa-chevron-down'}`;
+        colBtn.title = isNowCollapsed ? 'Развернуть' : 'Свернуть';
+        if (!window._collapsedReportSections) window._collapsedReportSections = new Set();
+        if (isNowCollapsed) window._collapsedReportSections.add(secId);
+        else window._collapsedReportSections.delete(secId);
+        return;
+    }
+    const simpleToggle = e.target.closest('.simple-item-collapse-btn');
+    if (simpleToggle) {
+        const simpleId = simpleToggle.dataset.id;
+        const simpleBody = document.getElementById(`simple_body_${simpleId}`);
+        if (!simpleBody) return;
+        simpleBody.classList.toggle('d-none');
+        const isCollapsed = simpleBody.classList.contains('d-none');
+        simpleToggle.querySelector('i').className = `fa-solid ${isCollapsed ? 'fa-chevron-down' : 'fa-chevron-up'}`;
+        simpleToggle.title = isCollapsed ? 'Развернуть' : 'Свернуть';
+        return;
+    }
+    const fullToggle = e.target.closest('.full-item-collapse-btn');
+    if (!fullToggle) return;
+    const fullId = fullToggle.dataset.id;
+    const fullBody = document.getElementById(`full_body_${fullId}`);
+    if (!fullBody) return;
+    fullBody.classList.toggle('d-none');
+    const isCollapsed = fullBody.classList.contains('d-none');
+    fullToggle.querySelector('i').className = `fa-solid ${isCollapsed ? 'fa-chevron-down' : 'fa-chevron-up'}`;
+    fullToggle.title = isCollapsed ? 'Развернуть' : 'Свернуть';
 });
 
 document.getElementById('analyzeBtn').addEventListener('click', async () => {
@@ -34,19 +56,41 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
 
     const ALL_VIZ = ['Таблица', 'Столбчатая диаграмма', 'Накопленная диаграмма', 'Круговая диаграмма'];
     const configs = [];
+    const addedQNames = new Set();
+
+    // Сначала вопросы из разделов
     (window.reportSections || []).forEach(sec => {
         sec.questions.forEach(q => {
-            configs.push({ column: q.qName, viz_type: ALL_VIZ, file_mapping: window.questionMapping[q.qName] });
+            if (addedQNames.has(q.qName)) return;
+            addedQNames.add(q.qName);
+            const mergedColumns = (window.questionMerges && window.questionMerges[q.qName]) || [];
+            configs.push({
+                column: q.qName,
+                viz_type: ALL_VIZ,
+                file_mapping: window.questionMapping[q.qName],
+                merged_columns: mergedColumns,
+                section_id: sec.id
+            });
+        });
+    });
+    
+    // Затем нераспределённые вопросы (справа на шаге 4)
+    document.querySelectorAll('#availableQuestionsList .available-q-item').forEach(el => {
+        const qName = el.dataset.qname;
+        if (addedQNames.has(qName)) return;
+        addedQNames.add(qName);
+        const mergedColumns = (window.questionMerges && window.questionMerges[qName]) || [];
+        configs.push({
+            column: qName,
+            viz_type: ALL_VIZ,
+            file_mapping: window.questionMapping[qName],
+            merged_columns: mergedColumns,
+            section_id: null
         });
     });
 
     if (!configs.length) {
-        showToast('Нет вопросов в разделах. Добавьте вопросы на шаге 4.', 'warning');
-        return;
-    }
-    const hasViz = (window.reportSections || []).some(sec => sec.questions.some(q => q.visualize));
-    if (!hasViz) {
-        showToast('Нет вопросов для визуализации. Нажмите кнопку с иконкой диаграммы у нужных вопросов в разделах (шаг 4).', 'warning');
+        showToast('Нет вопросов. Выберите вопросы на шаге 3.', 'warning');
         return;
     }
 
@@ -69,13 +113,13 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
             window.stackedChartsData = {};
             window.pieChartsData = {};
             window.renderedTabs = {};
+            window._collapsedReportSections = new Set();
 
             let tableCounter = 1;
             let figureCounter = 1;
             let globalItemIdx = 0;
-            let resultIdx = 0;
 
-            const renderItem = (item, container) => {
+            const renderItemFull = (item, container) => {
                 const id = `item_${globalItemIdx++}`;
                 window.renderedTabs[id] = { bar: false, stacked: false, pie: false };
                 window.chartsData[id] = true;
@@ -84,6 +128,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
 
                 window.appData[id] = {
                     question_name: item.col_name,
+                    visualize: true,
                     options: { showTotal: true, highlightTop: false, topN: 1, chartDirection: 'y', highlightColor: '#dc3545', hiddenCol: 'none', tableVertical: false, showLegend: item.file_keys.length > 1 },
                     headers: { h1: "Ответ", h2: "Кол-во ответивших", h3: "% от числа ответивших" },
                     data: item.data,
@@ -93,7 +138,6 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                     pieColors: [...PIE_COLORS],
                     barColors: [...PIE_COLORS]
                 };
-
                 const tNum = tableCounter++;
                 const fNumBar = figureCounter++;
                 const fNumStacked = figureCounter++;
@@ -109,7 +153,11 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                         </div>
                     </div>`).join('');
 
-                const html = `<h5 class="fw-semibold text-dark mb-2">${item.col_name}</h5><div class="result-item">
+                const html = `<div class="d-flex align-items-center gap-2 py-1 px-2 mb-2 border rounded ui-system-font" style="background:rgba(111,66,193,.12);border-color:rgba(111,66,193,.35)!important;">
+                    <span class="flex-grow-1 small fw-semibold text-truncate" style="color:#6f42c1;" title="${_escAttr(item.col_name)}">${_escHtml(item.col_name)}</span>
+                    <button type="button" class="full-item-collapse-btn btn btn-sm btn-link p-0 text-secondary" data-id="${id}" title="Свернуть"><i class="fa-solid fa-chevron-up"></i></button>
+                </div>
+                <div id="full_body_${id}"><div class="result-item">
                     <ul class="nav nav-tabs ui-system-font" id="tabs_${id}">
                         <li class="nav-item"><button class="nav-link active viz-tab-btn" data-id="${id}" data-tab="table"><i class="fa-solid fa-table me-1"></i>Таблица</button></li>
                         <li class="nav-item"><button class="nav-link viz-tab-btn" data-id="${id}" data-tab="bar"><i class="fa-solid fa-chart-column me-1"></i>Столбчатая</button></li>
@@ -165,7 +213,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                         <div class="d-flex gap-3 flex-wrap">${pieCanvasesHtml}</div>
                         <div class="text-center mb-4">Рисунок ${fNumPie} – Распределение ответов респондентов на вопрос: «${item.col_name}»</div>
                     </div>
-                </div>`;
+                </div></div>`;
 
                 container.insertAdjacentHTML('beforeend', html);
                 document.getElementById(`settings_${id}`)?.querySelectorAll('[data-vis-tabs]').forEach(el => {
@@ -174,53 +222,106 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                 renderTable(id);
             };
 
-            (window.reportSections || []).forEach(sec => {
-                const vizQuestions = sec.questions.filter(q => q.visualize);
-                let sectionBody = null;
+            const renderItemSimple = (item, container) => {
+                const id = `item_${globalItemIdx++}`;
+                window.appData[id] = {
+                    question_name: item.col_name,
+                    visualize: false,
+                    options: { showTotal: true, highlightTop: false, topN: 1, chartDirection: 'y', highlightColor: '#dc3545', hiddenCol: 'none', tableVertical: false, showLegend: false },
+                    headers: { h1: "Ответ", h2: "Кол-во ответивших", h3: "% от числа ответивших" },
+                    data: item.data,
+                    file_keys: item.file_keys,
+                    file_labels: item.file_labels,
+                    file_colors: item.file_colors,
+                    pieColors: [...PIE_COLORS],
+                    barColors: [...PIE_COLORS]
+                };
+                const html = `
+                <div class="result-item-simple mb-1">
+                    <div class="d-flex align-items-center gap-2 py-1 px-2 bg-light border rounded ui-system-font">
+                        <span class="flex-grow-1 small fw-semibold text-truncate" title="${_escAttr(item.col_name)}">${_escHtml(item.col_name)}</span>
+                        <button type="button" class="simple-item-collapse-btn btn btn-sm btn-link p-0 text-secondary" data-id="${id}" title="Развернуть">
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </button>
+                    </div>
+                    <div class="d-none border border-top-0 rounded-bottom p-2" id="simple_body_${id}">
+                        <div class="d-flex justify-content-end mb-2 ui-system-font">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="confirmFuzzyMapping('${id}')" title="Сгруппировать похожие ответы"><i class="fa-solid fa-shuffle"></i></button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-hover table-custom-border align-middle mb-0" id="${id}">
+                                <thead></thead><tbody></tbody><tfoot></tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>`;
+                container.insertAdjacentHTML('beforeend', html);
+                renderTable(id);
+            };
 
-                if (vizQuestions.length) {
-                    const rscCollapsed = window._collapsedReportSections && window._collapsedReportSections.has(sec.id);
-                    reportContent.insertAdjacentHTML('beforeend', `
-                        <div class="report-section-card mb-4">
-                            <div class="report-section-header">
-                                <i class="fa-solid fa-layer-group me-2"></i>
-                                <span class="flex-grow-1">${_escHtml(sec.name)}</span>
-                                <button type="button" class="report-section-collapse-btn" data-section-id="${_escAttr(sec.id)}" title="${rscCollapsed ? 'Развернуть' : 'Свернуть'}">
-                                    <i class="fa-solid ${rscCollapsed ? 'fa-chevron-up' : 'fa-chevron-down'}"></i>
-                                </button>
-                            </div>
-                            <div class="report-section-wrapper${rscCollapsed ? ' collapsed' : ''}" data-section-id="${_escAttr(sec.id)}">
-                                <div class="report-section-body" id="rsc_${_escAttr(sec.id)}"></div>
-                            </div>
-                        </div>`);
-                    sectionBody = document.getElementById(`rsc_${sec.id}`);
-                }
+            const resultsByName = {};
+            data.results.forEach(item => {
+                if (item && item.col_name) resultsByName[item.col_name] = item;
+            });
+
+            const assignedQNames = new Set((window.reportSections || []).flatMap(s => s.questions.map(q => q.qName)));
+
+            const vizQNames = new Set();
+            (window.reportSections || []).forEach(sec => {
+                sec.questions.forEach(q => { if (q.visualize) vizQNames.add(q.qName); });
+            });
+
+            (window.reportSections || []).forEach(sec => {
+                if (!sec.questions || sec.questions.length === 0) return;
+
+                const rscCollapsed = window._collapsedReportSections && window._collapsedReportSections.has(sec.id);
+                const secColor = sec.color || '#a0bce5';
+                reportContent.insertAdjacentHTML('beforeend', `
+                    <div class="report-section-card mb-4" style="border-left: 3px solid ${secColor}; padding-left: 8px;">
+                        <div class="report-section-header">
+                            <i class="fa-solid fa-layer-group me-2" style="color:${secColor};"></i>
+                            <span class="flex-grow-1" style="color:${secColor};">${_escHtml(sec.name)}</span>
+                            <button type="button" class="report-section-collapse-btn" data-section-id="${_escAttr(sec.id)}" title="${rscCollapsed ? 'Развернуть' : 'Свернуть'}">
+                                <i class="fa-solid ${rscCollapsed ? 'fa-chevron-up' : 'fa-chevron-down'}"></i>
+                            </button>
+                        </div>
+                        <div class="report-section-wrapper${rscCollapsed ? ' collapsed' : ''}" data-section-id="${_escAttr(sec.id)}">
+                            <div class="report-section-body" id="rsc_${_escAttr(sec.id)}"></div>
+                        </div>
+                    </div>`);
+                const sectionBody = document.getElementById(`rsc_${sec.id}`);
 
                 sec.questions.forEach(q => {
-                    const item = data.results[resultIdx++];
-                    if (!item) return;
-                    if (q.visualize && sectionBody) {
-                        renderItem(item, sectionBody);
-                    } else {
-                        const id = `item_${globalItemIdx++}`;
-                        window.renderedTabs[id] = { bar: false, stacked: false, pie: false };
-                        window.chartsData[id] = true;
-                        window.stackedChartsData[id] = true;
-                        window.pieChartsData[id] = true;
-                        window.appData[id] = {
-                            question_name: item.col_name,
-                            options: { showTotal: true, highlightTop: false, topN: 1, chartDirection: 'y', highlightColor: '#dc3545', hiddenCol: 'none', tableVertical: false, showLegend: item.file_keys.length > 1 },
-                            headers: { h1: 'Ответ', h2: 'Кол-во ответивших', h3: '% от числа ответивших' },
-                            data: item.data,
-                            file_keys: item.file_keys,
-                            file_labels: item.file_labels,
-                            file_colors: item.file_colors,
-                            pieColors: [...PIE_COLORS],
-                            barColors: [...PIE_COLORS]
-                        };
-                    }
+                    const item = resultsByName[q.qName];
+                    if (!item || !sectionBody) return;
+                    if (vizQNames.has(q.qName)) renderItemFull(item, sectionBody);
+                    else renderItemSimple(item, sectionBody);
                 });
             });
+
+            const unassignedItems = configs
+                .filter(cfg => !assignedQNames.has(cfg.column))
+                .map(cfg => resultsByName[cfg.column])
+                .filter(Boolean);
+
+            if (unassignedItems.length) {
+                const uaCollapsed = window._collapsedReportSections && window._collapsedReportSections.has('unassigned');
+                reportContent.insertAdjacentHTML('beforeend', `
+                    <div class="report-section-card mb-4" style="border-left: 3px solid #6c757d; padding-left: 8px;">
+                        <div class="report-section-header" style="color:#6c757d;">
+                            <i class="fa-solid fa-layer-group me-2"></i>
+                            <span class="flex-grow-1">Без раздела</span>
+                            <button type="button" class="report-section-collapse-btn" data-section-id="unassigned" title="${uaCollapsed ? 'Развернуть' : 'Свернуть'}">
+                                <i class="fa-solid ${uaCollapsed ? 'fa-chevron-up' : 'fa-chevron-down'}"></i>
+                            </button>
+                        </div>
+                        <div class="report-section-wrapper${uaCollapsed ? ' collapsed' : ''}" data-section-id="unassigned">
+                            <div class="report-section-body" id="rsc_unassigned"></div>
+                        </div>
+                    </div>`);
+                const unassignedBody = document.getElementById('rsc_unassigned');
+                unassignedItems.forEach(item => renderItemSimple(item, unassignedBody));
+            }
 
         } else { showToast(data.message, 'danger'); }
     } catch (err) { showToast('Ошибка соединения с сервером', 'danger'); }
@@ -322,3 +423,4 @@ document.addEventListener('click', e => {
         setTimeout(() => drawPieChart(id), 50);
     }
 });
+

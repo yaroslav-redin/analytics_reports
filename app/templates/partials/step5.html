@@ -10,20 +10,25 @@
             Нажмите кнопку, чтобы сгенерировать аналитический отчёт и скачать его в формате Word.
         </p>
 
-        <div class="d-flex flex-column gap-3" style="max-width:520px;margin:0 auto;">
+        <div class="d-flex flex-column gap-3" style="max-width:780px;margin:0 auto;">
 
-            <div class="p-3">
-                <button type="button" class="btn btn-primary w-100" id="downloadApiBtn">
+            <div class="p-3 d-flex gap-2 mx-auto" style="max-width:390px;">
+                <button type="button" class="btn btn-primary flex-fill" id="downloadApiBtn">
                     <i class="fa-solid fa-file-arrow-down me-2"></i>Скачать отчёт
+                </button>
+                <button type="button" class="btn btn-outline-danger flex-fill" id="exportStopBtn" disabled>
+                    <i class="fa-solid fa-stop me-1"></i>Остановить
                 </button>
             </div>
 
             <!-- Прогресс -->
             <div id="exportProgressContainer" class="d-none">
-                <div class="progress mb-1" style="height:18px;border-radius:8px;">
+                <div class="progress mb-1" style="height:36px;border-radius:8px;position:relative;">
                     <div id="exportProgressBar"
                          class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
-                         role="progressbar" style="width:0%;font-size:0.72rem;"></div>
+                         role="progressbar" style="width:0%;"></div>
+                    <span id="exportProgressText"
+                          style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:0.9rem;font-weight:600;color:#fff;text-shadow:0 0 6px rgba(0,0,0,0.9),0 0 12px rgba(0,0,0,0.7),0 1px 3px rgba(0,0,0,0.8);pointer-events:none;"></span>
                 </div>
                 <small id="exportProgressLabel" class="text-muted d-block text-center text-truncate"></small>
                 <small id="exportTimerLabel" class="text-muted d-block text-center mt-1"

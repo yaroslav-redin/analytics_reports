@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
+<script>
+(function(){var t=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-bs-theme',t);})();
+</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title }}</title>
@@ -22,6 +25,9 @@
     <nav class="navbar navbar-dark bg-primary shadow-sm navbar-no-shrink">
         <div class="container-fluid px-4">
             <a class="navbar-brand" href="/"><i class="fa-solid fa-chart-pie me-2"></i>МГУ им. Огарева | Аналитика опросов</a>
+            <button class="btn btn-outline-light btn-sm" id="themeToggleBtn" title="Переключить тему">
+                <i class="fa-solid fa-moon" id="themeIcon"></i>
+            </button>
         </div>
     </nav>
 
@@ -54,5 +60,20 @@
     <script src="{{ url_for('static', path='js/modules/step4.js') }}"></script>
     <script src="{{ url_for('static', path='js/modules/step5.js') }}"></script>
     <script src="{{ url_for('static', path='js/modules/step6.js') }}"></script>
+    <script>
+    (function(){
+        var btn = document.getElementById('themeToggleBtn');
+        var icon = document.getElementById('themeIcon');
+        function applyTheme(t) {
+            document.documentElement.setAttribute('data-bs-theme', t);
+            icon.className = t === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+            localStorage.setItem('theme', t);
+        }
+        applyTheme(localStorage.getItem('theme') || 'light');
+        btn.addEventListener('click', function() {
+            applyTheme(document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark');
+        });
+    })();
+    </script>
 </body>
 </html>

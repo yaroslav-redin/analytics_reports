@@ -208,12 +208,13 @@ document.getElementById('saveMappingBtn').addEventListener('click', () => {
     window.questionMapping[currentMappingQName] = mapping;
 
     const isMissing = missingCount > 0;
+    const missingTitle = 'Вопрос не соотнесён во всех файлах — нажмите, чтобы исправить';
+    const okTitle = 'Соотнести вручную';
+
     document.querySelectorAll('.section-q-mapping-btn').forEach(btn => {
         if (btn.dataset.qname !== currentMappingQName) return;
         btn.classList.toggle('text-danger', isMissing);
-        btn.title = isMissing
-            ? 'Вопрос не соотнесён во всех файлах — нажмите, чтобы исправить'
-            : 'Соотнести вручную';
+        btn.title = isMissing ? missingTitle : okTitle;
         const row = btn.closest('.section-question-item');
         if (row) {
             row.classList.toggle('q-item-missing', isMissing);
@@ -222,6 +223,14 @@ document.getElementById('saveMappingBtn').addEventListener('click', () => {
             if (!isMissing && q && q.visualize) row.classList.add('q-item-viz');
             else row.classList.remove('q-item-viz');
         }
+    });
+
+    document.querySelectorAll('.avail-q-mapping-btn').forEach(btn => {
+        if (btn.dataset.qname !== currentMappingQName) return;
+        btn.classList.toggle('text-danger', isMissing);
+        btn.title = isMissing ? missingTitle : okTitle;
+        const row = btn.closest('.available-q-item');
+        if (row) row.classList.toggle('q-item-missing', isMissing);
     });
 
     bootstrap.Modal.getInstance(document.getElementById('dataMappingModal')).hide();

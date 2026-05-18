@@ -14,6 +14,11 @@
                     <input type="text" class="form-control" id="newSectionName" placeholder="Название раздела">
                     <div class="invalid-feedback">Введите название раздела</div>
                 </div>
+                <div class="mb-3 d-flex align-items-center gap-2">
+                    <label class="form-label fw-semibold mb-0" for="newSectionColor">Цвет раздела</label>
+                    <input type="color" class="form-control form-control-color" id="newSectionColor" value="#0d6efd" style="width:40px;height:32px;padding:2px 3px;cursor:pointer;">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="randomNewSectionColor" title="Случайный цвет"><i class="fa-solid fa-dice-five"></i></button>
+                </div>
                 <div class="mb-1">
                     <label class="form-label fw-semibold" for="newSectionDesc">Описание</label>
                     <textarea class="form-control" id="newSectionDesc" rows="2" placeholder="Краткое описание для точной генерации ИИ-аналитики"></textarea>
@@ -41,6 +46,11 @@
                     <label class="form-label fw-semibold" for="editSectionName">Название<span class="text-danger">*</span></label>
                     <input type="text" class="form-control" id="editSectionName" placeholder="Название раздела">
                     <div class="invalid-feedback">Введите название раздела</div>
+                </div>
+                <div class="mb-3 d-flex align-items-center gap-2">
+                    <label class="form-label fw-semibold mb-0" for="editSectionColor">Цвет раздела</label>
+                    <input type="color" class="form-control form-control-color" id="editSectionColor" value="#0d6efd" style="width:40px;height:32px;padding:2px 3px;cursor:pointer;">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="randomEditSectionColor" title="Случайный цвет"><i class="fa-solid fa-dice-five"></i></button>
                 </div>
                 <div class="mb-1">
                     <label class="form-label fw-semibold" for="editSectionDesc">Описание</label>
@@ -234,6 +244,39 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fa-solid fa-xmark me-1"></i>Отмена</button>
                 <button type="button" class="btn btn-primary" id="applyMergeBtn"><i class="fa-solid fa-code-merge me-1"></i>Применить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Склейка вопросов -->
+<div class="modal fade" id="mergeQuestionsModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title ui-system-font">
+                    <i class="fa-solid fa-code-merge me-2"></i>Склеить вопросы
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body ui-system-font">
+                <p class="text-muted small mb-3">
+                    Ответы из отмеченных вопросов будут добавлены к ответам основного вопроса
+                    <strong id="mergeQuestionsSourceLabel"></strong>.<br>
+                    Вопросы-доноры исчезнут из списка — их данные войдут в основной.
+                </p>
+                <!-- modals.html — внутри #mergeQuestionsModal .modal-body, ДОБАВИТЬ перед строкой поиска: -->
+                <div id="mergeQuestionsAttached" class="mb-2"></div>
+                <input type="text" class="form-control form-control-sm mb-2" id="mergeQuestionsSearch" placeholder="Поиск вопроса...">
+                <div class="scrollable-box" style="max-height:340px" id="mergeQuestionsList"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fa-solid fa-xmark me-1"></i>Отмена
+                </button>
+                <button type="button" class="btn btn-primary" id="applyMergeQuestionsBtn">
+                    <i class="fa-solid fa-code-merge me-1"></i>Склеить
+                </button>
             </div>
         </div>
     </div>

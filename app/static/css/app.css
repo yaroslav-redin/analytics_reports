@@ -153,11 +153,9 @@ html { height: 100%; }
 /* ===================== EXISTING ===================== */
 .report-section-card { border: 1px solid #dee2e6; border-radius: 10px; overflow: hidden; }
 .report-section-header { background: #f0f4ff; padding: 0.6rem 1.25rem; font-weight: 600; font-size: 1.05rem; color: #1a3a6b; border-bottom: 1px solid #d0d9f0; display: flex; align-items: center; gap: 0.5rem; }
-.report-section-collapse-btn { background: transparent; border: none; color: #7b9fd4; cursor: pointer; padding: 0; font-size: 0.8rem; flex-shrink: 0; line-height: 1; transition: color 0.15s; }
-.report-section-collapse-btn:hover { color: #0d6efd; }
-.report-section-wrapper { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 0.18s ease-in; }
-.report-section-wrapper.collapsed { grid-template-rows: 0fr; }
-.report-section-body { min-height: 0; overflow: hidden; padding: 1.25rem 1.25rem 0.25rem; }
+.report-section-collapse-btn { background: transparent; border: none; color: #7b9fd4; cursor: pointer; padding: 0; font-size: 0.8rem; flex-shrink: 0; line-height: 1; transition: color 0.15s; }.report-section-collapse-btn:hover { color: #0d6efd; }
+.report-section-wrapper.collapsed { display: none; }
+.report-section-body { padding: 1.25rem 1.25rem 0.25rem; }
 .result-item { border-bottom: 2px solid #eee; padding-bottom: 30px; margin-bottom: 30px; }
 .scrollable-box { max-height: 250px; overflow-y: auto; border: 1px solid #dee2e6; padding: 15px; border-radius: 5px; background: #fff; }
 .drag-handle { cursor: grab; font-size: 1.2rem; color: #888; }
@@ -230,6 +228,17 @@ th:hover .row-toggle-container, th.col-excluded .row-toggle-container { opacity:
 .available-q-item:last-child { border-bottom: none; }
 .available-q-item:hover { background: #f1f3f5; }
 .available-q-item.dragging { opacity: 0.35; }
+.available-q-item.q-item-missing { background: rgba(220, 53, 69, 0.07); }
+.merge-question-btn { opacity: 0; transition: opacity 0.15s; background: transparent; border: none; color: #6c757d; cursor: pointer; padding: 0 3px; font-size: 0.8rem; flex-shrink: 0; }
+.available-q-item:hover .merge-question-btn,
+.section-question-item:hover .merge-question-btn { opacity: 1; }
+.merge-question-btn.btn-warning { opacity: 1; color: #e6a817; }
+.merge-question-btn:hover { color: #0d6efd; }
+.avail-q-mapping-btn { opacity: 0; transition: opacity 0.15s; background: transparent; border: none; color: #6c757d; cursor: pointer; padding: 0 2px; font-size: 0.8rem; flex-shrink: 0; }
+.available-q-item:hover .avail-q-mapping-btn { opacity: 1; }
+.avail-q-mapping-btn.text-danger { opacity: 1; }
+.avail-q-mapping-btn:hover { color: #0d6efd; }
+.avail-q-mapping-btn.text-danger:hover { color: #a71d2a; }
 
 .file-section-title { background: #e9ecef; padding: 5px 10px; border-radius: 5px; font-weight: bold; margin-top: 10px; margin-bottom: 5px; }
 .missing-warning { cursor: help; color: #dc3545; font-weight: bold; }
@@ -258,3 +267,82 @@ th:hover .row-toggle-container, th.col-excluded .row-toggle-container { opacity:
 
 #chartEditModal { pointer-events: none !important; background: transparent !important; }
 #chartEditModal .modal-dialog { pointer-events: auto;  }
+
+/* ===================== DARK THEME ===================== */
+[data-bs-theme="dark"] .wizard-body {
+    background: #15171a;
+}
+[data-bs-theme="dark"] .wizard-card {
+    background: #1e2124;
+    box-shadow: 0 2px 20px rgba(0,0,0,.45);
+}
+[data-bs-theme="dark"] .wizard-nav-bar {
+    background: #1e2124;
+    border-top-color: #2e3338;
+    box-shadow: 0 -2px 8px rgba(0,0,0,.2);
+}
+[data-bs-theme="dark"] .wizard-step-footer {
+    border-top-color: #2e3338;
+}
+[data-bs-theme="dark"] .upload-dropzone {
+    background: #252930;
+    border-color: #3d4349;
+}
+[data-bs-theme="dark"] .upload-dropzone.drag-over {
+    background: #172038;
+    border-color: #0d6efd;
+}
+[data-bs-theme="dark"] .upload-title { color: #dee2e6; }
+[data-bs-theme="dark"] .scrollable-box {
+    background: #252930;
+    border-color: #2e3338;
+}
+[data-bs-theme="dark"] .report-section-card {
+    border-color: #2e3338;
+}
+[data-bs-theme="dark"] .report-section-header {
+    background: #192032;
+    color: #90b8ff;
+    border-bottom-color: #26365a;
+}
+[data-bs-theme="dark"] .report-section-collapse-btn { color: #4d7fc4; }
+[data-bs-theme="dark"] .result-item {
+    border-bottom-color: #2e3338;
+}
+[data-bs-theme="dark"] .section-card {
+    background: #1e2124;
+    border-color: #2e3338;
+}
+[data-bs-theme="dark"] .step4-right-list {
+    background: #252930;
+    border-color: #2e3338;
+}
+[data-bs-theme="dark"] .file-section-title {
+    background: #2e3338;
+    color: #dee2e6;
+}
+[data-bs-theme="dark"] .section-empty-hint { color: #6c757d; }
+[data-bs-theme="dark"] .available-q-item:hover { background: #2e3338; }
+[data-bs-theme="dark"] .available-q-item { border-bottom-color: #2e3338; }
+[data-bs-theme="dark"] .section-question-item { border-bottom-color: #2e3338; }
+[data-bs-theme="dark"] .section-question-item.q-item-viz { background: rgba(111,66,193,.25); }
+[data-bs-theme="dark"] .section-question-item.q-item-missing { background: rgba(220,53,69,.22); }
+[data-bs-theme="dark"] .available-q-item.q-item-missing { background: rgba(220,53,69,.18); }
+[data-bs-theme="dark"] .section-questions-list.drag-over {
+    border-color: #0d6efd;
+    background: #172038;
+}
+[data-bs-theme="dark"] .q-item-container:hover { background-color: #2e3338 !important; }
+[data-bs-theme="dark"] .sortable-ghost { background-color: #2e3338; }
+[data-bs-theme="dark"] .row-excluded > td,
+[data-bs-theme="dark"] .row-excluded > th { background-color: #2e3338 !important; }
+[data-bs-theme="dark"] .editable-cell:hover { background-color: #2e3338; }
+[data-bs-theme="dark"] .editable-cell:focus { background-color: #15171a; }
+[data-bs-theme="dark"] .step-dot { background: #3d4349; }
+[data-bs-theme="dark"] .step-dot.done { background: #3d6ab0; }
+[data-bs-theme="dark"] .step-help-icon { color: #495057; }
+[data-bs-theme="dark"] #reportContent { color: #dee2e6; }
+[data-bs-theme="dark"] .drag-handle { color: #6c757d; }
+[data-bs-theme="dark"] .settings-btn { color: #6c757d; }
+[data-bs-theme="dark"] #themeToggleBtn { transition: opacity 0.2s; }
+#themeToggleBtn { transition: opacity 0.2s; }
