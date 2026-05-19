@@ -8,3 +8,5 @@ pyarrow
 python-docx
 python-dotenv
 openai
+httpx
+itsdangerous

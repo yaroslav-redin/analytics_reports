@@ -60,7 +60,6 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
     const configs = [];
     const addedQNames = new Set();
 
-    // Сначала вопросы из разделов
     (window.reportSections || []).forEach(sec => {
         sec.questions.forEach(q => {
             if (addedQNames.has(q.qName)) return;
@@ -75,8 +74,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
             });
         });
     });
-    
-    // Затем нераспределённые вопросы (справа на шаге 4)
+
     document.querySelectorAll('#availableQuestionsList .available-q-item').forEach(el => {
         const qName = el.dataset.qname;
         if (addedQNames.has(qName)) return;
@@ -96,7 +94,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
         return;
     }
 
-    const payload = { file_labels: fileLabels, file_colors: fileColors, configs: configs };
+    const payload = { session_id: window.sessionId, file_labels: fileLabels, file_colors: fileColors, configs: configs };
 
     document.getElementById('analyzeBtn').disabled = true;
     document.getElementById('analyzeSpinner').classList.remove('d-none');
@@ -146,82 +144,81 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                 const fNumPie = figureCounter;
                 figureCounter += item.file_keys.length;
 
-                const pieCanvasesHtml = item.file_keys.map((fk, fi) => `
-                    <div class="text-center flex-fill">
-                        <div class="fw-medium mb-1 ui-system-font small">${item.file_labels[fk]}</div>
-                        <div class="pie-container">
-                            <canvas id="pie_canvas_${id}_${fi}"></canvas>
-                            <p class="text-muted small py-3 d-none" id="pie_msg_${id}_${fi}"></p>
-                        </div>
-                    </div>`).join('');
+                const el = _tpl('tpl-full-result-item');
 
-                const html = `<div class="full-item-wrapper full-item-open border rounded mb-2" style="border-color:rgba(111,66,193,.35)!important;overflow:hidden;">
-                    <div class="full-item-header d-flex align-items-center gap-2 py-1 px-2 ui-system-font" style="background:rgba(111,66,193,.12);">
-                        <span class="flex-grow-1 small fw-semibold text-truncate" style="color:#6f42c1;" title="${_escAttr(item.col_name)}">${_escHtml(item.col_name)}</span>
-                        <button type="button" class="full-item-collapse-btn btn btn-sm btn-link p-0 text-secondary" data-id="${id}" title="Свернуть"><i class="fa-solid fa-chevron-up"></i></button>
-                    </div>
-                <div id="full_body_${id}"><div class="result-item">
-                    <ul class="nav nav-tabs ui-system-font" id="tabs_${id}">
-                        <li class="nav-item"><button class="nav-link active viz-tab-btn" data-id="${id}" data-tab="table"><i class="fa-solid fa-table me-1"></i>Таблица</button></li>
-                        <li class="nav-item"><button class="nav-link viz-tab-btn" data-id="${id}" data-tab="bar"><i class="fa-solid fa-chart-column me-1"></i>Столбчатая</button></li>
-                        <li class="nav-item"><button class="nav-link viz-tab-btn" data-id="${id}" data-tab="stacked"><i class="fa-solid fa-chart-bar me-1"></i>Накопленная</button></li>
-                        <li class="nav-item"><button class="nav-link viz-tab-btn" data-id="${id}" data-tab="pie"><i class="fa-solid fa-chart-pie me-1"></i>Круговая</button></li>
-                    </ul>
-                    <div class="ui-system-font chart-settings-panel p-2 mb-3 border border-top-0 border-secondary-subtle rounded-bottom d-flex flex-wrap gap-3 align-items-center shadow-sm" id="settings_${id}">
-                        <div class="form-check mb-0" data-vis-tabs="table">
-                            <input class="form-check-input setting-show-total" type="checkbox" id="total_${id}" data-id="${id}" checked>
-                            <label class="form-check-label small fw-medium" for="total_${id}"><i class="fa-solid fa-sigma me-1 text-muted"></i>Добавить строку "Всего"</label>
-                        </div>
-                        <div class="form-check form-switch mb-0" data-vis-tabs="table bar">
-                            <input class="form-check-input setting-highlight-top" type="checkbox" id="hl_${id}" data-id="${id}">
-                            <label class="form-check-label small fw-medium" for="hl_${id}"><i class="fa-solid fa-trophy me-1 text-muted"></i>Выделить топ:</label>
-                        </div>
-                        <input type="number" class="form-control form-control-sm setting-top-n input-w-70" data-id="${id}" value="1" min="1" max="${item.data.length * item.file_keys.length}" data-vis-tabs="table bar">
-                        <input type="color" class="form-control form-control-color setting-highlight-color color-input-sm" data-id="${id}" value="#dc3545" title="Цвет выделения топа" data-vis-tabs="table bar">
-                        <button type="button" class="btn btn-sm btn-outline-secondary random-highlight-color-btn" data-id="${id}" title="Случайный цвет" data-vis-tabs="table bar"><i class="fa-solid fa-dice-five"></i></button>
-                        <div class="vr" data-vis-tabs="table bar"></div>
-                        <div class="form-check form-switch mb-0" data-vis-tabs="table bar stacked">
-                            <input class="form-check-input setting-vertical" type="checkbox" id="vert_${id}" data-id="${id}">
-                            <label class="form-check-label small fw-medium" for="vert_${id}"><i class="fa-solid fa-rotate me-1 text-muted"></i>Вертикальный</label>
-                        </div>
-                        <div class="form-check mb-0" data-vis-tabs="bar stacked pie">
-                            <input class="form-check-input setting-show-legend" type="checkbox" id="legend_${id}" data-id="${id}" ${item.file_keys.length > 1 ? 'checked' : ''}>
-                            <label class="form-check-label small fw-medium" for="legend_${id}"><i class="fa-solid fa-list-ul me-1 text-muted"></i>Легенда</label>
-                        </div>
-                        <button type="button" class="btn btn-sm btn-outline-secondary ms-auto" onclick="openHideColModal('${id}')" title="Скрыть столбцы" data-vis-tabs="table"><i class="fa-solid fa-eye-slash"></i></button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openChartEditModal('${id}')" title="Редактировать данные диаграммы" data-vis-tabs="bar stacked pie"><i class="fa-solid fa-pen"></i></button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="confirmFuzzyMapping('${id}')" title="Сгруппировать похожие ответы"><i class="fa-solid fa-shuffle"></i></button>
-                    </div>
-                    <div id="pane_table_${id}">
-                        <div class="mb-3">Таблица ${tNum} – Распределение ответов респондентов на вопрос: «${item.col_name}»</div>
-                        <div class="table-responsive mb-4">
-                            <table class="table table-bordered table-hover table-custom-border align-middle mb-0" id="${id}">
-                                <thead></thead>
-                                <tbody></tbody>
-                                <tfoot></tfoot>
-                            </table>
-                        </div>
-                    </div>
-                    <div id="pane_bar_${id}" class="d-none">
-                        <div id="bar_color_editor_${id}"></div>
-                        <div class="chart-container mb-2"><canvas id="canvas_${id}"></canvas></div>
-                        <div class="text-center mb-4">Рисунок ${fNumBar} – Распределение ответов респондентов на вопрос: «${item.col_name}»</div>
-                    </div>
-                    <div id="pane_stacked_${id}" class="d-none">
-                        <div class="stacked-container mb-2"><canvas id="stacked_canvas_${id}"></canvas></div>
-                        <div class="text-center mb-4">Рисунок ${fNumStacked} – Распределение ответов респондентов на вопрос: «${item.col_name}»</div>
-                    </div>
-                    <div id="pane_pie_${id}" class="d-none">
-                        <div id="pie_color_editor_${id}"></div>
-                        <div class="d-flex gap-3 flex-wrap">${pieCanvasesHtml}</div>
-                        <div class="text-center mb-4">Рисунок ${fNumPie} – Распределение ответов респондентов на вопрос: «${item.col_name}»</div>
-                    </div>
-                </div></div></div>`;
+                const titleSpan = el.querySelector('.full-item-title');
+                titleSpan.textContent = item.col_name;
+                titleSpan.title = item.col_name;
 
-                container.insertAdjacentHTML('beforeend', html);
-                document.getElementById(`settings_${id}`)?.querySelectorAll('[data-vis-tabs]').forEach(el => {
-                    el.classList.toggle('d-none', !el.dataset.visTabs.split(' ').includes('table'));
+                el.querySelector('.full-item-collapse-btn').dataset.id = id;
+                el.querySelector('.full-item-body').id = `full_body_${id}`;
+
+                const tabsUl = el.querySelector('.full-item-tabs');
+                tabsUl.id = `tabs_${id}`;
+                tabsUl.querySelectorAll('.viz-tab-btn').forEach(btn => btn.dataset.id = id);
+
+                const settings = el.querySelector('.full-item-settings');
+                settings.id = `settings_${id}`;
+
+                const _setInputId = (sel, uid) => {
+                    const inp = settings.querySelector(sel);
+                    inp.id = uid;
+                    inp.dataset.id = id;
+                    const lbl = inp.nextElementSibling;
+                    if (lbl && lbl.tagName === 'LABEL') lbl.htmlFor = uid;
+                    return inp;
+                };
+                _setInputId('.setting-show-total', `total_${id}`);
+                _setInputId('.setting-highlight-top', `hl_${id}`);
+                _setInputId('.setting-vertical', `vert_${id}`);
+                const legendInput = _setInputId('.setting-show-legend', `legend_${id}`);
+                legendInput.checked = item.file_keys.length > 1;
+
+                const topNInput = settings.querySelector('.setting-top-n');
+                topNInput.dataset.id = id;
+                topNInput.max = item.data.length * item.file_keys.length;
+                settings.querySelector('.setting-highlight-color').dataset.id = id;
+                settings.querySelector('.random-highlight-color-btn').dataset.id = id;
+                settings.querySelector('.full-item-hide-col-btn').dataset.id = id;
+                settings.querySelector('.full-item-edit-btn').dataset.id = id;
+                settings.querySelector('.full-item-fuzzy-btn').dataset.id = id;
+
+                el.querySelector('.full-item-pane-table').id = `pane_table_${id}`;
+                el.querySelector('.full-item-table-caption').textContent =
+                    `Таблица ${tNum} – Распределение ответов респондентов на вопрос: «${item.col_name}»`;
+                el.querySelector('.full-item-table').id = id;
+
+                el.querySelector('.full-item-pane-bar').id = `pane_bar_${id}`;
+                el.querySelector('.full-item-bar-color-editor').id = `bar_color_editor_${id}`;
+                el.querySelector('.full-item-bar-canvas').id = `canvas_${id}`;
+                el.querySelector('.full-item-bar-caption').textContent =
+                    `Рисунок ${fNumBar} – Распределение ответов респондентов на вопрос: «${item.col_name}»`;
+
+                el.querySelector('.full-item-pane-stacked').id = `pane_stacked_${id}`;
+                el.querySelector('.full-item-stacked-canvas').id = `stacked_canvas_${id}`;
+                el.querySelector('.full-item-stacked-caption').textContent =
+                    `Рисунок ${fNumStacked} – Распределение ответов респондентов на вопрос: «${item.col_name}»`;
+
+                el.querySelector('.full-item-pane-pie').id = `pane_pie_${id}`;
+                el.querySelector('.full-item-pie-color-editor').id = `pie_color_editor_${id}`;
+
+                const pieCanvases = el.querySelector('.full-item-pie-canvases');
+                item.file_keys.forEach((fk, fi) => {
+                    const pc = _tpl('tpl-pie-canvas-item');
+                    pc.querySelector('.pie-file-label').textContent = item.file_labels[fk];
+                    pc.querySelector('.pie-canvas-el').id = `pie_canvas_${id}_${fi}`;
+                    pc.querySelector('.pie-msg-el').id = `pie_msg_${id}_${fi}`;
+                    pieCanvases.appendChild(pc);
                 });
+
+                el.querySelector('.full-item-pie-caption').textContent =
+                    `Рисунок ${fNumPie} – Распределение ответов респондентов на вопрос: «${item.col_name}»`;
+
+                settings.querySelectorAll('[data-vis-tabs]').forEach(settEl => {
+                    settEl.classList.toggle('d-none', !settEl.dataset.visTabs.split(' ').includes('table'));
+                });
+
+                container.appendChild(el);
                 renderTable(id);
             };
 
@@ -239,27 +236,45 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                     pieColors: [...PIE_COLORS],
                     barColors: [...PIE_COLORS]
                 };
-                const html = `
-                <div class="result-item-simple mb-1">
-                    <div class="d-flex align-items-center gap-2 py-1 px-2 bg-light simple-item-header border rounded ui-system-font">
-                        <span class="flex-grow-1 small fw-semibold text-truncate" title="${_escAttr(item.col_name)}">${_escHtml(item.col_name)}</span>
-                        <button type="button" class="simple-item-collapse-btn btn btn-sm btn-link p-0 text-secondary" data-id="${id}" title="Развернуть">
-                            <i class="fa-solid fa-chevron-down"></i>
-                        </button>
-                    </div>
-                    <div class="d-none border border-top-0 rounded-bottom p-2" id="simple_body_${id}">
-                        <div class="d-flex justify-content-end mb-2 ui-system-font">
-                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="confirmFuzzyMapping('${id}')" title="Сгруппировать похожие ответы"><i class="fa-solid fa-shuffle"></i></button>
-                        </div>
-                        <div class="table-responsive">
-                            <table class="table table-bordered table-hover table-custom-border align-middle mb-0" id="${id}">
-                                <thead></thead><tbody></tbody><tfoot></tfoot>
-                            </table>
-                        </div>
-                    </div>
-                </div>`;
-                container.insertAdjacentHTML('beforeend', html);
+
+                const el = _tpl('tpl-simple-result-item');
+
+                const titleSpan = el.querySelector('.simple-item-title');
+                titleSpan.textContent = item.col_name;
+                titleSpan.title = item.col_name;
+
+                el.querySelector('.simple-item-collapse-btn').dataset.id = id;
+                el.querySelector('.simple-item-body').id = `simple_body_${id}`;
+                el.querySelector('.simple-item-fuzzy-btn').dataset.id = id;
+                el.querySelector('.simple-item-table').id = id;
+
+                container.appendChild(el);
                 renderTable(id);
+            };
+
+            const _buildReportSectionCard = (secId, secName, secColor, isCollapsed) => {
+                const card = _tpl('tpl-report-section-card');
+                card.style.borderLeft = `3px solid ${secColor}`;
+                card.style.paddingLeft = '8px';
+
+                card.querySelector('.report-section-icon').style.color = secColor;
+
+                const nameSpan = card.querySelector('.report-section-name');
+                nameSpan.textContent = secName;
+                nameSpan.style.color = secColor;
+
+                const collapseBtn = card.querySelector('.report-section-collapse-btn');
+                collapseBtn.dataset.sectionId = secId;
+                collapseBtn.title = isCollapsed ? 'Развернуть' : 'Свернуть';
+                collapseBtn.querySelector('i').className = `fa-solid ${isCollapsed ? 'fa-chevron-up' : 'fa-chevron-down'}`;
+
+                const wrapper = card.querySelector('.report-section-wrapper');
+                wrapper.dataset.sectionId = secId;
+                if (isCollapsed) wrapper.classList.add('collapsed');
+
+                card.querySelector('.report-section-body').id = `rsc_${secId}`;
+
+                return card;
             };
 
             const resultsByName = {};
@@ -279,21 +294,10 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
 
                 const rscCollapsed = window._collapsedReportSections && window._collapsedReportSections.has(sec.id);
                 const secColor = sec.color || '#a0bce5';
-                reportContent.insertAdjacentHTML('beforeend', `
-                    <div class="report-section-card mb-4" style="border-left: 3px solid ${secColor}; padding-left: 8px;">
-                        <div class="report-section-header">
-                            <i class="fa-solid fa-layer-group me-2" style="color:${secColor};"></i>
-                            <span class="flex-grow-1" style="color:${secColor};">${_escHtml(sec.name)}</span>
-                            <button type="button" class="report-section-collapse-btn" data-section-id="${_escAttr(sec.id)}" title="${rscCollapsed ? 'Развернуть' : 'Свернуть'}">
-                                <i class="fa-solid ${rscCollapsed ? 'fa-chevron-up' : 'fa-chevron-down'}"></i>
-                            </button>
-                        </div>
-                        <div class="report-section-wrapper${rscCollapsed ? ' collapsed' : ''}" data-section-id="${_escAttr(sec.id)}">
-                            <div class="report-section-body" id="rsc_${_escAttr(sec.id)}"></div>
-                        </div>
-                    </div>`);
-                const sectionBody = document.getElementById(`rsc_${sec.id}`);
+                const card = _buildReportSectionCard(sec.id, sec.name, secColor, rscCollapsed);
+                reportContent.appendChild(card);
 
+                const sectionBody = document.getElementById(`rsc_${sec.id}`);
                 sec.questions.forEach(q => {
                     const item = resultsByName[q.qName];
                     if (!item || !sectionBody) return;
@@ -309,23 +313,14 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
 
             if (unassignedItems.length) {
                 const uaCollapsed = window._collapsedReportSections && window._collapsedReportSections.has('unassigned');
-                reportContent.insertAdjacentHTML('beforeend', `
-                    <div class="report-section-card mb-4" style="border-left: 3px solid #6c757d; padding-left: 8px;">
-                        <div class="report-section-header" style="color:#6c757d;">
-                            <i class="fa-solid fa-layer-group me-2"></i>
-                            <span class="flex-grow-1">Без раздела</span>
-                            <button type="button" class="report-section-collapse-btn" data-section-id="unassigned" title="${uaCollapsed ? 'Развернуть' : 'Свернуть'}">
-                                <i class="fa-solid ${uaCollapsed ? 'fa-chevron-up' : 'fa-chevron-down'}"></i>
-                            </button>
-                        </div>
-                        <div class="report-section-wrapper${uaCollapsed ? ' collapsed' : ''}" data-section-id="unassigned">
-                            <div class="report-section-body" id="rsc_unassigned"></div>
-                        </div>
-                    </div>`);
+                const card = _buildReportSectionCard('unassigned', 'Без раздела', '#6c757d', uaCollapsed);
+                reportContent.appendChild(card);
+
                 const unassignedBody = document.getElementById('rsc_unassigned');
                 unassignedItems.forEach(item => renderItemSimple(item, unassignedBody));
             }
 
+            updateStep6Btn();
         } else { showToast(data.message, 'danger'); }
     } catch (err) { showToast('Ошибка соединения с сервером', 'danger'); }
     finally {
@@ -392,6 +387,18 @@ document.addEventListener('click', e => {
         return;
     }
 
+    const hideColBtn = e.target.closest('.full-item-hide-col-btn');
+    if (hideColBtn) { openHideColModal(hideColBtn.dataset.id); return; }
+
+    const editBtn = e.target.closest('.full-item-edit-btn');
+    if (editBtn) { openChartEditModal(editBtn.dataset.id); return; }
+
+    const fuzzyBtn = e.target.closest('.full-item-fuzzy-btn');
+    if (fuzzyBtn) { confirmFuzzyMapping(fuzzyBtn.dataset.id); return; }
+
+    const simpleFuzzyBtn = e.target.closest('.simple-item-fuzzy-btn');
+    if (simpleFuzzyBtn) { confirmFuzzyMapping(simpleFuzzyBtn.dataset.id); return; }
+
     const btn = e.target.closest('.viz-tab-btn');
     if (!btn) return;
     const id = btn.dataset.id;
@@ -426,4 +433,3 @@ document.addEventListener('click', e => {
         setTimeout(() => drawPieChart(id), 50);
     }
 });
-

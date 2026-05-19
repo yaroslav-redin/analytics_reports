@@ -250,7 +250,7 @@ def _call_llm(prompt: str, system: str = "") -> str:
 
 # ===================== АНАЛИТИКА (файл 2) =====================
 
-def generate_analysis_docx(questions: list, progress_callback=None) -> bytes:
+def generate_analysis_docx(questions: list, progress_callback=None, cancel_event=None) -> bytes:
     """Аналитический файл: один вызов LLM на каждый вопрос."""
     doc = _make_doc()
     total_questions = len(questions)
@@ -258,6 +258,9 @@ def generate_analysis_docx(questions: list, progress_callback=None) -> bytes:
     chart_counter = [1]
 
     for idx, q in enumerate(questions, start=1):
+        if cancel_event and cancel_event.is_set():
+            break
+
         sec = q.get("section")
         sec_name = sec.get("name") if sec else ""
         sec_description = sec.get("description", "") if sec else ""

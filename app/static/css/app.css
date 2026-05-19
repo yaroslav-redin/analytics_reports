@@ -1,4 +1,9 @@
 /* ===================== GLOBAL ===================== */
+.dropdown-item-logout:hover,
+.dropdown-item-logout:focus {
+    background-color: var(--bs-danger);
+    color: #fff !important;
+}
 html { height: 100%; }
 .navbar-no-shrink { flex-shrink: 0; }
 .spinner-app { width: 1.4rem; height: 1.4rem; border-width: 2px !important; }
@@ -63,7 +68,7 @@ html { height: 100%; }
     max-width: 80%;
     margin: 0 auto;
     width: 100%;
-    min-height: 77vh;
+    min-height: 75vh;
 }
 .wizard-card-wide { max-width: 90%; }
 
@@ -476,3 +481,81 @@ th:hover .row-toggle-container, th.col-excluded .row-toggle-container { opacity:
 [data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-dropdown .select2-results__options .select2-results__option.select2-results__message {
     color: #6c757d;
 }
+
+/* ===================== RESPONSIVE ===================== */
+
+/* Широкие мониторы: ограничиваем максимальную ширину карточки */
+@media (min-width: 1600px) {
+    .wizard-card       { max-width: 1280px; }
+    .wizard-card-wide  { max-width: 1520px; }
+}
+
+/* Компактные ноутбуки (1025–1280px) */
+@media (max-width: 1280px) {
+    .wizard-card       { max-width: 92%; padding: 1.25rem 1.5rem; }
+    .wizard-card-wide  { max-width: 97%; }
+    .wizard-card       { max-height: 70vh; }
+    .step4-body        { height: calc(70vh - 120px); }
+    .scrollable-box-lg { max-height: 46vh; }
+    .questions-scroll  { max-height: 40vh; }
+}
+
+/* Планшеты / небольшие ноутбуки (до 1024px) */
+@media (max-width: 1024px) {
+    .wizard-step       { padding: 1.25rem 0.75rem 0.75rem; }
+    .wizard-card       { max-width: 100%; padding: 1.1rem 1.25rem; border-radius: 10px; max-height: 70vh;}
+    .wizard-card-wide  { max-width: 100%; }
+
+    /* Шаг 4: укладываем колонки вертикально */
+    .step4-body  { flex-direction: column; height: auto; }
+    .step4-left  { width: 100%; height: 42vh; min-height: 240px; }
+    .step4-right { width: 100%; height: 34vh; min-height: 180px; }
+
+    .scrollable-box-lg { max-height: 36vh; }
+    .questions-scroll  { max-height: 36vh; }
+
+    .nav-fwd-btn { min-width: 160px; }
+    #navBackBtn  { min-width: 100px; }
+}
+
+/* Планшеты в портрете / крупные телефоны (до 768px) */
+@media (max-width: 768px) {
+    .wizard-step  { padding: 0.75rem 0.5rem 0.5rem; }
+    .wizard-card  { padding: 0.9rem 1rem; border-radius: 8px; min-height: 66vh; }
+    .wizard-step-title { font-size: 1rem; }
+    .wizard-step-num   { width: 28px; height: 28px; font-size: 0.85rem; }
+
+    .step4-left  { height: 36vh; }
+    .step4-right { height: 30vh; }
+
+    .scrollable-box-lg { max-height: 30vh; }
+    .questions-scroll  { max-height: 30vh; }
+
+    .wizard-nav-bar { padding: 0 0.75rem; height: 60px; }
+    .nav-fwd-btn { min-width: 120px; font-size: 0.875rem; padding: 0.375rem 0.75rem; }
+    #navBackBtn  { min-width: 80px;  font-size: 0.875rem; padding: 0.375rem 0.5rem; }
+
+    /* Скрываем стрелки в кнопках навигации, оставляем только смысловые иконки */
+    .nav-fwd-btn .fa-arrow-right { display: none; }
+
+    .pie-container { max-width: 100%; }
+    .chart-container { max-width: 100%; }
+}
+
+/* Телефоны (до 576px) */
+@media (max-width: 576px) {
+    .wizard-step  { padding: 0.5rem 0.25rem 0.5rem; }
+    .wizard-card  { padding: 0.75rem 0.75rem; border-radius: 6px; }
+
+    .step4-left  { height: 32vh; }
+    .step4-right { height: 28vh; }
+
+    .nav-fwd-btn { min-width: 0; font-size: 0.8rem; }
+    #navBackBtn  { min-width: 0; }
+
+    /* На очень маленьких: обрезаем длинную подпись навбара */
+    .navbar-brand { font-size: 0.85rem; }
+    .wizard-nav-bar { height: 56px; }
+}
+
+/* Dark theme: те же правки для тёмной темы не нужны — все переменные наследуются */

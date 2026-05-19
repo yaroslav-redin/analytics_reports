@@ -50,6 +50,7 @@ document.getElementById('uploadForm').addEventListener('submit', async (e) => {
         const response = await fetch('/upload', { method: 'POST', body: formData });
         const data = await response.json();
         if (response.ok) {
+            window.sessionId = data.session_id;
             window.uploadedFiles = data.files.sort((a, b) => b.original_name.localeCompare(a.original_name, 'ru'));
             const container = document.getElementById('sheetCheckboxesContainer');
             container.innerHTML = '';

@@ -1,65 +1,102 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Этот файл содержит инструкции для Claude Code (claude.ai/code) при работе с кодом в этом репозитории.
 
-## Команды
+## Запуск приложения
 
 ```bash
-# Активировать виртуальное окружение (Windows)
-venv\Scripts\activate.bat
-
-# Запустить dev-сервер
-uvicorn app.main:app --reload
-
-# Установить зависимости
+# Первоначальная настройка
+python -m venv venv
+source venv/Scripts/activate   # Windows bash; для CMD: venv\Scripts\activate.bat
 pip install -r requirements.txt
+cp .env.example .env           # заполнить секреты
+
+# Запуск dev-сервера (порт 64548 зарегистрирован в настройках OAuth-редиректа ЭИОС)
+uvicorn app.main:app --reload --port 64548
 ```
 
-Тестового фреймворка, линтера и шага сборки нет. Проверка — вручную через браузер.
+Тестов нет. `test_mistral.py` — устаревший скрипт проверки, использует пакет, которого нет в `requirements.txt`.
 
-## Архитектура
+## Переменные окружения (`.env`)
 
-**Бэкенд** — FastAPI-приложение (`app/main.py`), 5 POST-эндпоинтов:
-- `/upload` — сохраняет файлы в `uploads/raw_<name>`, возвращает список листов
-- `/process_sheets` — читает выбранные листы, запускает `clean_dataframe()`, сохраняет `uploads/clean_<name>.parquet`, возвращает метаданные столбцов
-- `/analyze` — вызывает `generate_report_data()`: читает parquet-файлы, считает частоты ответов по каждому вопросу, возвращает данные в форме `window.appData`
-- `/ai_group_answers` — нормализует свободные ответы через Mistral API или локальный Ollama (модель `mistral`)
-- `/export_docx` — генерирует Word-документ через `python-docx`
+| Переменная | Назначение |
+|---|---|
+| `OPENROUTER_API_KEY` | Вызовы LLM (нормализация ответов + анализ документа) |
+| `OPENROUTER_MODEL` | ID модели для OpenRouter (по умолчанию `openai/gpt-oss-120b:free`) |
+| `EIOS_CLIENT_ID` / `EIOS_CLIENT_SECRET` | Учётные данные OAuth 2.0 с портала разработчика ЭИОС (p.mrsu.ru) |
+| `EIOS_REDIRECT_URI` | Должен совпадать с зарегистрированным в ЭИОС (напр. `http://localhost:64548/signin-eios`) |
+| `EIOS_ALLOWED_ROLE` | Оставить пустым — разрешить все роли; указать значение — ограничить по роли ЭИОС |
+| `SESSION_SECRET_KEY` | Ключ подписи для Starlette `SessionMiddleware` |
 
-Ключевые модули бэкенда:
-- `app/data_logic.py` — `clean_dataframe()` убирает нумерацию из ответов/столбцов, обрабатывает столбцы с возрастом, унифицирует нумерованные ответы; `generate_report_data()` считает частоты по файлам; `get_column_groups()` группирует столбцы вида `"Вопрос / Подвопрос"` по префиксу
-- `app/docx_gen.py` — одна функция `generate_docx()`, всё форматирование документа (поля, шрифт, стили) находится здесь
-- `app/ai_report.py` — `group_answers_local()` использует Ollama, `group_answers_api()` использует Mistral API; для API-варианта нужен `MISTRAL_API_KEY` в `.env`
+## Обзор архитектуры
 
-**Фронтенд** — 6-шаговый визард, без шага сборки, без ES-модулей. Весь JS работает в глобальной области видимости через `<script>`-теги в порядке загрузки:
+### Бэкенд (`app/`)
 
-| Порядок | Файл | Ответственность |
-|---------|------|-----------------|
-| 1 | `modules/utils.js` | Инициализация глобального состояния, `showToast`, `_escHtml`, `_escAttr`, `randomColor` |
-| 2 | `modules/wizard.js` | `goToStep()`, обновление состояния кнопок, делегирование кнопки «Назад» |
-| 3 | `modules/upload.js` | Drag-and-drop, отправка формы → `/upload` |
-| 4 | `modules/sheets.js` | Форма выбора листов → `/process_sheets`, `renderLegendSettings()` |
-| 5 | `modules/questions.js` | Рендер списка вопросов, `addQuestionToSortable`, `openMappingModal` |
-| 6 | `modules/fuzzy.js` | Логика модалок: нечёткое/диапазонное/AI-группирование ответов |
-| 7 | `modules/charts.js` | `drawChart`, `drawStackedChart`, `drawPieChart`; модалки редактирования/скрытия столбцов |
-| 8 | `modules/step4.js` | CRUD разделов отчёта, перетаскивание вопросов в разделы |
-| 9 | `modules/step5.js` | Обработчик `analyzeBtn` — вызывает `/analyze`, рендерит таблицы и графики |
-| 10 | `modules/step6.js` | Вызов `/export_docx`, финальная инициализация тултипов |
+**`main.py`** — FastAPI-приложение с 6 основными эндпоинтами и `lifespan()`, запускающим фоновый цикл очистки каждые 6 часов: удаляет директории `uploads/{session_id}/` старше 6 часов.
 
-HTML-шаблоны используют Jinja2 `{% include 'partials/stepN.html' %}`. Партиалы лежат в `app/templates/partials/` (step0–step5, wizard_nav, modals).
+| Эндпоинт | Описание |
+|---|---|
+| `POST /upload` | Принимает несколько `.xlsx`/`.csv` файлов, сохраняет в `uploads/{session_id}/raw_*`, возвращает имена листов |
+| `POST /process_sheets` | Читает выбранные листы через Pandas, запускает `clean_dataframe()`, сохраняет как Parquet, возвращает сгруппированные имена столбцов |
+| `POST /ai_group_answers` | Вызывает OpenRouter LLM для нормализации свободных ответов (опечатки, регистр, транслитерация); до 5 попыток с backoff при 429 |
+| `POST /analyze` | Агрегирует количество ответов по файлам, возвращает JSON для Chart.js |
+| `POST /export_docx_stream` | SSE-поток; генерирует Word-документ в фоновом потоке с LLM-анализом по каждому вопросу; отправляет события прогресса, затем base64-файл |
+| `GET /auth/*` (auth.py) | OAuth 2.0 flow: `/login` → редирект → `/signin-eios` callback → cookie сессии |
 
-**Глобальное состояние** (все переменные на `window.*`, инициализируются в `utils.js`):
-- `processedFiles` — массив объектов, возвращённых `/process_sheets` (содержит `clean_filename`, `columns`)
-- `questionMapping` — `{ qName: { clean_filename: mappedQName } }` — соответствие вопросов между файлами
-- `questionSourceFile` — `{ qName: fileIndex }` — из какого файла вопрос был изначально выбран
-- `appData` — `{ "q_N": { data, file_keys, file_labels, options, ... } }` — заполняется при вызове анализа на шаге 5
-- `charts` — кэш экземпляров Chart.js; ключи: `id` (столбчатая), `"stacked_"+id` (накопленная), `"pie_"+id+"_"+fi` (круговая)
+**`data_logic.py`** — Очистка данных:
+- Удаляет числовые префиксы из ответов: `"1) Вариант"` → `"Вариант"`
+- Извлекает числа из полей с возрастом
+- Дедублицирует варианты ответов (оставляет наиболее частый как канонический)
+- Помечает системные столбцы (timestamp, email, ID) для исключения из анализа
+- Группирует столбцы по `/`-префиксу: `"Q1 / Файл A"`, `"Q1 / Файл B"` → группа `"Q1"`
 
-**Шаги визарда** соответствуют DOM-идентификаторам `wizardStep0`–`wizardStep5`. Навигация реализована через CSS `translateX` на `#wizardTrack`.
+**`docx_gen.py`** — Генерирует два `.docx` файла за один экспорт: только данные и с AI-анализом. Для AI-версии вызывает OpenRouter по одному разу на вопрос с 3 few-shot примерами (позитивный, негативный, противоречивый тон). Вставляет редактируемые Excel-диаграммы (не изображения) через `chart_gen.py`. Между вызовами LLM — задержка 10 секунд во избежание rate limit.
 
-## Важные ограничения
+**`chart_gen.py`** — Создаёт OOXML-пакеты диаграмм (OPC), встроенные в Word-документ как настоящие Excel-книги. Поддерживает: столбчатую, составную столбчатую, горизонтальную и круговую диаграммы.
 
-- **Динамические значения в HTML всегда экранировать**: `_escAttr(s)` — для значений атрибутов, `_escHtml(s)` — для текстового содержимого. Никогда не вставлять имена вопросов или тексты ответов «сырыми» в шаблонные строки, генерирующие HTML. Не использовать inline `onclick="fn('${value}')"` — вместо этого применять `data-*`-атрибуты и делегирование событий.
-- `style="display:none"` на `#legendSettingsBlock` и `#fileSelectContainer` — намеренно: JS переключает `.style.display` напрямую; заменять CSS-классами нельзя.
-- Загруженные файлы сохраняются в `uploads/` и не удаляются между перезапусками сервера.
-- Для AI-функций нужен либо `MISTRAL_API_KEY` в `.env` (API-режим), либо запущенный Ollama с загруженной моделью `mistral` (локальный режим).
+### Фронтенд (`app/static/js/modules/`)
+
+Без шага сборки. Весь JS — vanilla ES6-модули, подключаемые через `<script type="module">` в `index.html`. Сторонние библиотеки (Chart.js, SortableJS, Select2, jQuery) хранятся локально в `static/js/`.
+
+**6-шаговый мастер** отображается через `translateX()` на `#wizardTrack`. Шаг назад вызывает `_resetFromStep(n)`, который сбрасывает всё состояние начиная с шага `n`.
+
+| Модуль | Ответственность |
+|---|---|
+| `wizard.js` | Навигация по шагам, `_resetFromStep()`, включение/отключение кнопок |
+| `upload.js` | Drag & drop → `POST /upload` → `window.sessionId` |
+| `sheets.js` | Чекбоксы листов → `POST /process_sheets` |
+| `questions.js` | Выбор вопросов, нечёткое сопоставление между файлами, диалог AI-группировки |
+| `step4.js` | Организация разделов через SortableJS drag-drop |
+| `step5.js` | Настройки легенды/экспорта, выбор типа визуализации, `show_total` |
+| `step6.js` | SSE-стриминг, прогресс-бар, скачивание `.docx` из base64 |
+| `charts.js` | Рендеринг Chart.js (бар, стековый бар, круговая, таблица); назначение цветов |
+| `fuzzy.js` | Нечёткий поиск для предложения сопоставлений вопросов между файлами |
+| `utils.js` | `showToast()`, `escapeHtml()`, генерация цветов |
+
+### Глобальное состояние (`window.*`)
+
+Всё состояние мастера хранится в `window` — никаких фреймворковых хранилищ нет:
+
+- `window.sessionId` — идентификатор сессии загрузки
+- `window.uploadedFiles`, `window.processedFiles` — метаданные файлов
+- `window.questionMapping` — `{local_name → {clean_filename → question_name_in_file}}`
+- `window.reportSections` — вложенная структура `{sectionName → [questions]}`
+- `window.appData`, `window.chartsData` — результаты анализа из `/analyze`
+- `window.charts` — экземпляры Chart.js (ключ — имя вопроса)
+
+### Структура шаблонов (`app/templates/`)
+
+- `index.html` — основной макет; подключает все партиалы через Jinja2 `{% include %}`
+- `partials/step0.html` … `step5.html` — по одному `<div>` на каждый шаг мастера
+- `partials/templates.html` — встроенные HTML-шаблоны, клонируемые JS для динамической генерации DOM
+- `partials/modals.html` — диалог AI-группировки и модали импорта/экспорта
+- `login.html` — страница OAuth-входа (отображается при неаутентифицированной сессии)
+
+## Неочевидные соглашения
+
+- **Порт 64548** обязателен — он зарегистрирован как OAuth redirect URI в системе ЭИОС университета.
+- **Хранение в Parquet**: очищенные DataFrame сохраняются как `.parquet` (не CSV) для эффективности; требует `pyarrow`.
+- **Дедублицирование ответов**: наиболее распространённый вариант написания ответа считается каноническим. Варианты объединяются на клиенте до вызова `/analyze`.
+- **Сопоставление вопросов между файлами**: если два файла содержат одинаковый вопрос под разными именами столбцов, `fuzzy.js` предлагает сопоставление; пользователь подтверждает на Шаге 2. Сопоставление хранится по паре `(local_name, clean_filename)`.
+- **SSE-экспорт**: `POST /export_docx_stream` использует `EventSourceResponse`. Фронтенд слушает события `progress`, `complete` и `error`. При `complete` payload — JSON с ключами `data_b64` и `analysis_b64` (base64 `.docx`).
+- **Логика повторов AI**: `ai_report.py` повторяет вызовы OpenRouter до 5 раз с экспоненциальным backoff только при HTTP 429. Остальные ошибки выбрасываются сразу.

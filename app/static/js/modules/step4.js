@@ -41,7 +41,7 @@ function _renderSectionsList() {
     }
     container.innerHTML = '';
     window.reportSections.forEach(sec => {
-        container.insertAdjacentHTML('beforeend', _buildSectionCardHtml(sec));
+        container.appendChild(_buildSectionCard(sec));
     });
     window.reportSections.forEach(sec => {
         const listEl = container.querySelector(`.section-questions-list[data-section-id="${sec.id}"]`);
@@ -61,37 +61,46 @@ function _renderSectionsList() {
     });
 }
 
-function _buildSectionCardHtml(sec) {
-    const qHtml = sec.questions.length === 0
-        ? `<div class="section-empty-hint">Перетащите вопросы сюда или нажмите «+»</div>`
-        : sec.questions.map(q => _buildSectionQuestionHtml(sec.id, q)).join('');
+function _buildSectionCard(sec) {
     const collapsed = window._collapsedSections && window._collapsedSections.has(sec.id);
     const sectionColor = sec.color || '#a0bce5';
-        return `
-        <div class="card mb-2 section-card" data-section-id="${_escAttr(sec.id)}" style="border-left: 3px solid ${sectionColor};">
-            <div class="card-body py-2 px-3">
-                <div class="d-flex align-items-center gap-2 mb-1">
-                    <button type="button" class="section-collapse-btn" data-section-id="${_escAttr(sec.id)}" title="${collapsed ? 'Развернуть' : 'Свернуть'}" style="color:${sectionColor};">
-                        <i class="fa-solid ${collapsed ? 'fa-chevron-up' : 'fa-chevron-down'}"></i>
-                    </button>
-                    <span class="fw-semibold flex-grow-1 text-truncate" title="${_escAttr(sec.name)}" style="color:${sectionColor};">${_escHtml(sec.name)}</span>
-                <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 add-qs-to-section-btn" data-section-id="${_escAttr(sec.id)}" title="Добавить выбранные вопросы">
-                    <i class="fa-solid fa-plus"></i>
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 edit-section-btn" data-section-id="${_escAttr(sec.id)}" title="Редактировать раздел">
-                    <i class="fa-solid fa-pen"></i>
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 delete-section-btn" data-section-id="${_escAttr(sec.id)}" title="Удалить раздел">
-                    <i class="fa-solid fa-trash-can"></i>
-                </button>
-            </div>
-            <div class="section-questions-wrapper${collapsed ? ' collapsed' : ''}" data-section-id="${_escAttr(sec.id)}">
-                <div class="section-questions-list border rounded p-1" data-section-id="${_escAttr(sec.id)}">
-                    ${qHtml}
-                </div>
-            </div>
-        </div>
-    </div>`;
+
+    const card = _tpl('tpl-section-card');
+    card.dataset.sectionId = sec.id;
+    card.style.borderLeft = `3px solid ${sectionColor}`;
+
+    const colBtn = card.querySelector('.section-collapse-btn');
+    colBtn.dataset.sectionId = sec.id;
+    colBtn.title = collapsed ? 'Развернуть' : 'Свернуть';
+    colBtn.style.color = sectionColor;
+    colBtn.querySelector('i').className = `fa-solid ${collapsed ? 'fa-chevron-up' : 'fa-chevron-down'}`;
+
+    const nameSpan = card.querySelector('.section-card-name');
+    nameSpan.textContent = sec.name;
+    nameSpan.title = sec.name;
+    nameSpan.style.color = sectionColor;
+
+    card.querySelector('.add-qs-to-section-btn').dataset.sectionId = sec.id;
+    card.querySelector('.edit-section-btn').dataset.sectionId = sec.id;
+    card.querySelector('.delete-section-btn').dataset.sectionId = sec.id;
+
+    const wrapper = card.querySelector('.section-questions-wrapper');
+    wrapper.dataset.sectionId = sec.id;
+    if (collapsed) wrapper.classList.add('collapsed');
+
+    const listEl = card.querySelector('.section-questions-list');
+    listEl.dataset.sectionId = sec.id;
+
+    if (sec.questions.length === 0) {
+        const hint = document.createElement('div');
+        hint.className = 'section-empty-hint';
+        hint.textContent = 'Перетащите вопросы сюда или нажмите «+»';
+        listEl.appendChild(hint);
+    } else {
+        sec.questions.forEach(q => listEl.appendChild(_buildSectionQuestion(sec.id, q)));
+    }
+
+    return card;
 }
 
 function _isMissingMapping(qName) {
@@ -100,33 +109,103 @@ function _isMissingMapping(qName) {
     return Object.keys(mapping).length < window.processedFiles.length;
 }
 
-function _buildSectionQuestionHtml(sectionId, q) {
+function _buildSectionQuestion(sectionId, q) {
     const multiFile = window.processedFiles && window.processedFiles.length > 1;
     const missing = multiFile && _isMissingMapping(q.qName);
-    const mappingBtn = multiFile
-        ? `<button type="button" class="section-q-action section-q-mapping-btn${missing ? ' text-danger' : ''}" data-qname="${_escAttr(q.qName)}" title="${missing ? 'Вопрос не соотнесён во всех файлах — нажмите, чтобы исправить' : 'Соотнести вручную'}"><i class="fa-solid fa-link"></i></button>`
-        : '';
     const merges = (window.questionMerges || {})[q.qName];
     const hasMerge = merges && merges.length;
     const mergeTitle = hasMerge
         ? `Склеен с: ${merges.map(m => `«${m}»`).join(', ')} (нажмите, чтобы изменить)`
         : 'Склеить с другим вопросом';
-    const itemClass = missing ? ' q-item-missing' : (q.visualize ? ' q-item-viz' : '');
-    return `
-    <div class="section-question-item${itemClass}" data-qname="${_escAttr(q.qName)}" data-section-id="${_escAttr(sectionId)}">
-        <span class="section-q-drag" title="Переместить"><i class="fa-solid fa-grip-lines"></i></span>
-        <span class="flex-grow-1 text-truncate small fw-medium" title="${_escAttr(q.qName)}">${_escHtml(q.qName)}</span>
-        <button type="button" class="section-q-viz-btn ${q.visualize ? 'active' : ''}" data-qname="${_escAttr(q.qName)}" data-section-id="${_escAttr(sectionId)}" title="${q.visualize ? 'Визуализируется (нажмите, чтобы отключить)' : 'Добавить визуализацию'}"><i class="fa-solid fa-chart-line"></i></button>
-        <button type="button" class="merge-question-btn${hasMerge ? ' btn-warning' : ''}" data-qname="${_escAttr(q.qName)}" title="${_escAttr(mergeTitle)}"><i class="fa-solid fa-arrows-to-circle"></i></button>
-        ${mappingBtn}
-        <button type="button" class="section-q-remove-btn" data-qname="${_escAttr(q.qName)}" data-section-id="${_escAttr(sectionId)}" title="Убрать из раздела">−</button>
-    </div>`;
+
+    const item = _tpl('tpl-section-question');
+    item.dataset.qname = q.qName;
+    item.dataset.sectionId = sectionId;
+    if (missing) item.classList.add('q-item-missing');
+    else if (q.visualize) item.classList.add('q-item-viz');
+
+    const nameSpan = item.querySelector('.section-q-name');
+    nameSpan.textContent = q.qName;
+    nameSpan.title = q.qName;
+
+    const vizBtn = item.querySelector('.section-q-viz-btn');
+    vizBtn.dataset.qname = q.qName;
+    vizBtn.dataset.sectionId = sectionId;
+    vizBtn.title = q.visualize ? 'Визуализируется (нажмите, чтобы отключить)' : 'Добавить визуализацию';
+    if (q.visualize) vizBtn.classList.add('active');
+
+    const mergeBtn = item.querySelector('.merge-question-btn');
+    mergeBtn.dataset.qname = q.qName;
+    mergeBtn.title = mergeTitle;
+    if (hasMerge) mergeBtn.classList.add('btn-warning');
+
+    const removeBtn = item.querySelector('.section-q-remove-btn');
+    removeBtn.dataset.qname = q.qName;
+    removeBtn.dataset.sectionId = sectionId;
+
+    if (multiFile) {
+        const mapBtn = _tpl('tpl-section-q-mapping-btn');
+        mapBtn.dataset.qname = q.qName;
+        mapBtn.title = missing
+            ? 'Вопрос не соотнесён во всех файлах — нажмите, чтобы исправить'
+            : 'Соотнести вручную';
+        if (missing) mapBtn.classList.add('text-danger');
+        item.insertBefore(mapBtn, removeBtn);
+    }
+
+    return item;
+}
+
+function _buildAvailableQItem(qName) {
+    const multiFile = window.processedFiles && window.processedFiles.length > 1;
+    const missing = multiFile && _isMissingMapping(qName);
+
+    const item = _tpl('tpl-available-q-item');
+    item.dataset.qname = qName;
+    if (missing) item.classList.add('q-item-missing');
+
+    const cb = item.querySelector('.avail-q-cb');
+    cb.dataset.qname = qName;
+
+    const nameSpan = item.querySelector('.avail-q-name');
+    nameSpan.textContent = qName;
+    nameSpan.title = qName;
+
+    if (multiFile) {
+        const mapBtn = _tpl('tpl-avail-q-mapping-btn');
+        mapBtn.dataset.qname = qName;
+        mapBtn.title = missing
+            ? 'Вопрос не соотнесён во всех файлах — нажмите, чтобы исправить'
+            : 'Соотнести вручную';
+        if (missing) mapBtn.classList.add('text-danger');
+        item.insertBefore(mapBtn, item.querySelector('.merge-question-btn'));
+    }
+
+    item.setAttribute('draggable', 'true');
+    item.addEventListener('click', e => {
+        if (e.target.classList.contains('avail-q-cb')) return;
+        if (e.target.closest('.merge-question-btn') || e.target.closest('.avail-q-mapping-btn')) return;
+        const c = item.querySelector('.avail-q-cb');
+        if (c) c.checked = !c.checked;
+        _syncSelectAllAvailableQ();
+    });
+    item.addEventListener('dragstart', e => {
+        item.classList.add('dragging');
+        const c = item.querySelector('.avail-q-cb');
+        const checkedNames = Array.from(document.querySelectorAll('#availableQuestionsList .avail-q-cb:checked')).map(x => x.dataset.qname);
+        window._step4DragNames = (c && c.checked && checkedNames.length > 0) ? checkedNames : [qName];
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', window._step4DragNames.join('\n'));
+    });
+    item.addEventListener('dragend', () => item.classList.remove('dragging'));
+    item.querySelector('.avail-q-cb').addEventListener('change', _syncSelectAllAvailableQ);
+
+    return item;
 }
 
 function _renderAvailableQuestions() {
     const container = document.getElementById('availableQuestionsList');
     const assigned = _getAssignedQNames();
-    const multiFile = window.processedFiles && window.processedFiles.length > 1;
 
     const donorNames = new Set();
     Object.values(window.questionMerges || {}).forEach(donors => {
@@ -140,43 +219,11 @@ function _renderAvailableQuestions() {
         return;
     }
 
-    container.innerHTML = available.map(qName => {
-        const missing = multiFile && _isMissingMapping(qName);
-        const mappingBtn = multiFile
-            ? `<button type="button" class="avail-q-mapping-btn${missing ? ' text-danger' : ''}" data-qname="${_escAttr(qName)}" title="${missing ? 'Вопрос не соотнесён во всех файлах — нажмите, чтобы исправить' : 'Соотнести вручную'}"><i class="fa-solid fa-link"></i></button>`
-            : '';
-        return `
-        <div class="available-q-item${missing ? ' q-item-missing' : ''}" data-qname="${_escAttr(qName)}">
-            <input type="checkbox" class="form-check-input flex-shrink-0 avail-q-cb cursor-pointer" data-qname="${_escAttr(qName)}">
-            <span class="flex-grow-1 text-truncate small" title="${_escAttr(qName)}">${_escHtml(qName)}</span>
-            ${mappingBtn}
-            <button type="button" class="merge-question-btn" data-qname="${_escAttr(qName)}" title="Склеить с другим вопросом"><i class="fa-solid fa-arrows-to-circle"></i></button>
-        </div>`;
-    }).join('');
+    container.innerHTML = '';
+    available.forEach(qName => container.appendChild(_buildAvailableQItem(qName)));
 
     const selectAll = document.getElementById('selectAllAvailableQ');
     if (selectAll) selectAll.checked = false;
-
-    container.querySelectorAll('.available-q-item').forEach(el => {
-        el.setAttribute('draggable', 'true');
-        el.addEventListener('click', e => {
-            if (e.target.classList.contains('avail-q-cb')) return;
-            if (e.target.closest('.merge-question-btn') || e.target.closest('.avail-q-mapping-btn')) return;
-            const cb = el.querySelector('.avail-q-cb');
-            if (cb) cb.checked = !cb.checked;
-            _syncSelectAllAvailableQ();
-        });
-        el.addEventListener('dragstart', e => {
-            el.classList.add('dragging');
-            const cb = el.querySelector('.avail-q-cb');
-            const checkedNames = Array.from(document.querySelectorAll('#availableQuestionsList .avail-q-cb:checked')).map(c => c.dataset.qname);
-            window._step4DragNames = (cb && cb.checked && checkedNames.length > 0) ? checkedNames : [el.dataset.qname];
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', window._step4DragNames.join('\n'));
-        });
-        el.addEventListener('dragend', () => el.classList.remove('dragging'));
-        el.querySelector('.avail-q-cb').addEventListener('change', _syncSelectAllAvailableQ);
-    });
 }
 
 function _syncSelectAllAvailableQ() {
@@ -381,7 +428,6 @@ function openMergeQuestionsModal(sourceName) {
 
     _renderMergeQuestionsList(allQNames, '');
 
-    // Переподвешиваем обработчик поиска (удаляем старый через clone)
     const searchEl = document.getElementById('mergeQuestionsSearch');
     const newSearch = searchEl.cloneNode(true);
     searchEl.parentNode.replaceChild(newSearch, searchEl);
@@ -401,20 +447,28 @@ function _renderMergeQuestionsList(names, filter) {
         return;
     }
 
-    container.innerHTML = filtered.map(name => {
-        // Показываем какие ответы уже склеены с этим вопросом (если есть)
+    container.innerHTML = '';
+    filtered.forEach(name => {
+        const item = _tpl('tpl-merge-q-item');
+        const uid = 'mqcb_' + Math.random().toString(36).slice(2);
+        const cb = item.querySelector('.merge-q-checkbox');
+        cb.value = name;
+        cb.id = uid;
+        const label = item.querySelector('.merge-q-label');
+        label.htmlFor = uid;
+        label.textContent = name;
+
         const merged = window.questionMerges && window.questionMerges[name];
-        const mergedHint = merged && merged.length
-            ? `<small class="text-muted ms-2">(уже склеен с: ${merged.slice(0,2).map(m => `«${_escHtml(m)}»`).join(', ')}${merged.length > 2 ? ` +${merged.length - 2}` : ''})</small>`
-            : '';
-        return `
-        <div class="form-check py-1 border-bottom d-flex align-items-start gap-2">
-            <input class="form-check-input flex-shrink-0 mt-1 merge-q-checkbox"
-                   type="checkbox" id="mqcb_${_escAttr(name)}" value="${_escAttr(name)}">
-            <label class="form-check-label small fw-medium cursor-pointer flex-grow-1"
-                   for="mqcb_${_escAttr(name)}">${_escHtml(name)}${mergedHint}</label>
-        </div>`;
-    }).join('');
+        if (merged && merged.length) {
+            const hint = document.createElement('small');
+            hint.className = 'text-muted ms-2';
+            const displayNames = merged.slice(0, 2).map(m => `«${m}»`).join(', ');
+            hint.textContent = `(уже склеен с: ${displayNames}${merged.length > 2 ? ` +${merged.length - 2}` : ''})`;
+            label.appendChild(hint);
+        }
+
+        container.appendChild(item);
+    });
 }
 
 document.getElementById('applyMergeQuestionsBtn').addEventListener('click', () => {
@@ -427,7 +481,6 @@ document.getElementById('applyMergeQuestionsBtn').addEventListener('click', () =
         return;
     }
 
-    // Сохраняем маппинг склейки: sourceName -> [donorName, ...]
     if (!window.questionMerges) window.questionMerges = {};
     if (!window.questionMerges[_mergeQuestionsSourceName]) {
         window.questionMerges[_mergeQuestionsSourceName] = [];
@@ -438,13 +491,11 @@ document.getElementById('applyMergeQuestionsBtn').addEventListener('click', () =
         }
     });
 
-    // Убираем доноров из availableQuestionsList
     checked.forEach(name => {
         const item = document.querySelector(`#availableQuestionsList .available-q-item[data-qname="${CSS.escape(name)}"]`);
         if (item) item.remove();
     });
 
-    // Обновляем иконку на кнопке источника — показываем что есть склейка
     _updateMergeIndicator(_mergeQuestionsSourceName);
 
     bootstrap.Modal.getInstance(document.getElementById('mergeQuestionsModal')).hide();
@@ -462,7 +513,7 @@ function _updateMergeIndicator(sourceName) {
         btn.title = title;
     });
 }
-// Обработчики случайного цвета
+
 document.getElementById('randomNewSectionColor').addEventListener('click', () => {
     document.getElementById('newSectionColor').value = randomColor();
 });
@@ -470,16 +521,13 @@ document.getElementById('randomEditSectionColor').addEventListener('click', () =
     document.getElementById('editSectionColor').value = randomColor();
 });
 
-
 function _renderAttachedDonors(sourceName) {
-    // Ищем или создаём блок прикреплённых доноров внутри модалки
     let attachedBlock = document.getElementById('mergeQuestionsAttached');
     if (!attachedBlock) {
-        // Вставляем перед строкой поиска
-        document.getElementById('mergeQuestionsSearch').insertAdjacentHTML('beforebegin', `
-            <div id="mergeQuestionsAttached" class="mb-2"></div>
-        `);
-        attachedBlock = document.getElementById('mergeQuestionsAttached');
+        attachedBlock = document.createElement('div');
+        attachedBlock.id = 'mergeQuestionsAttached';
+        attachedBlock.className = 'mb-2';
+        document.getElementById('mergeQuestionsSearch').insertAdjacentElement('beforebegin', attachedBlock);
     }
 
     const donors = (window.questionMerges && window.questionMerges[sourceName]) || [];
@@ -488,17 +536,24 @@ function _renderAttachedDonors(sourceName) {
         return;
     }
 
-    attachedBlock.innerHTML = `
-        <div class="small fw-semibold text-muted mb-1"><i class="fa-solid fa-paperclip me-1"></i>Уже прикреплены:</div>
-        ${donors.map(d => `
-            <div class="d-flex align-items-center justify-content-between py-1 border-bottom gap-2 attached-donor-row" data-donor="${_escAttr(d)}">
-                <span class="small text-truncate flex-grow-1" title="${_escAttr(d)}">${_escHtml(d)}</span>
-                <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 detach-donor-btn flex-shrink-0"
-                        data-source="${_escAttr(sourceName)}" data-donor="${_escAttr(d)}" title="Открепить вопрос">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </div>`).join('')}
-    `;
+    attachedBlock.innerHTML = '';
+
+    const header = document.createElement('div');
+    header.className = 'small fw-semibold text-muted mb-1';
+    header.innerHTML = '<i class="fa-solid fa-paperclip me-1"></i>Уже прикреплены:';
+    attachedBlock.appendChild(header);
+
+    donors.forEach(d => {
+        const row = _tpl('tpl-attached-donor-row');
+        row.dataset.donor = d;
+        const nameSpan = row.querySelector('.attached-donor-name');
+        nameSpan.textContent = d;
+        nameSpan.title = d;
+        const detachBtn = row.querySelector('.detach-donor-btn');
+        detachBtn.dataset.source = sourceName;
+        detachBtn.dataset.donor = d;
+        attachedBlock.appendChild(row);
+    });
 }
 
 document.getElementById('mergeQuestionsModal').addEventListener('click', (e) => {
@@ -508,7 +563,6 @@ document.getElementById('mergeQuestionsModal').addEventListener('click', (e) => 
     const sourceName = btn.dataset.source;
     const donorName = btn.dataset.donor;
 
-    // Удаляем донора из массива склеек
     if (window.questionMerges && window.questionMerges[sourceName]) {
         window.questionMerges[sourceName] = window.questionMerges[sourceName].filter(d => d !== donorName);
         if (window.questionMerges[sourceName].length === 0) {
@@ -516,48 +570,12 @@ document.getElementById('mergeQuestionsModal').addEventListener('click', (e) => 
         }
     }
 
-    // Возвращаем донора в правую панель
     const container = document.getElementById('availableQuestionsList');
-    // Проверяем что его там нет
     const alreadyThere = container.querySelector(`.available-q-item[data-qname="${CSS.escape(donorName)}"]`);
     if (!alreadyThere) {
-        const donorMultiFile = window.processedFiles && window.processedFiles.length > 1;
-        const donorMissing = donorMultiFile && _isMissingMapping(donorName);
-        const donorMapBtn = donorMultiFile
-            ? `<button type="button" class="avail-q-mapping-btn${donorMissing ? ' text-danger' : ''}" data-qname="${_escAttr(donorName)}" title="${donorMissing ? 'Вопрос не соотнесён во всех файлах — нажмите, чтобы исправить' : 'Соотнести вручную'}"><i class="fa-solid fa-link"></i></button>`
-            : '';
-        container.insertAdjacentHTML('beforeend', `
-            <div class="available-q-item${donorMissing ? ' q-item-missing' : ''}" data-qname="${_escAttr(donorName)}">
-                <input type="checkbox" class="form-check-input flex-shrink-0 avail-q-cb cursor-pointer" data-qname="${_escAttr(donorName)}">
-                <span class="flex-grow-1 text-truncate small" title="${_escAttr(donorName)}">${_escHtml(donorName)}</span>
-                ${donorMapBtn}
-                <button type="button" class="merge-question-btn" data-qname="${_escAttr(donorName)}" title="Склеить с другим вопросом"><i class="fa-solid fa-arrows-to-circle"></i></button>
-            </div>`);
-        // Восстанавливаем draggable и обработчики
-        const newItem = container.querySelector(`.available-q-item[data-qname="${CSS.escape(donorName)}"]`);
-        if (newItem) {
-            newItem.setAttribute('draggable', 'true');
-            newItem.addEventListener('click', e => {
-                if (e.target.classList.contains('avail-q-cb')) return;
-                if (e.target.closest('.merge-question-btn') || e.target.closest('.avail-q-mapping-btn')) return;
-                const cb = newItem.querySelector('.avail-q-cb');
-                if (cb) cb.checked = !cb.checked;
-                _syncSelectAllAvailableQ();
-            });
-            newItem.addEventListener('dragstart', e => {
-                newItem.classList.add('dragging');
-                window._step4DragNames = [donorName];
-                e.dataTransfer.effectAllowed = 'move';
-                e.dataTransfer.setData('text/plain', donorName);
-            });
-            newItem.addEventListener('dragend', () => newItem.classList.remove('dragging'));
-            newItem.querySelector('.avail-q-cb').addEventListener('change', _syncSelectAllAvailableQ);
-        }
+        container.appendChild(_buildAvailableQItem(donorName));
     }
 
-    // Обновляем индикатор кнопки источника
     _updateMergeIndicator(sourceName);
-
-    // Перерисовываем блок прикреплённых
     _renderAttachedDonors(sourceName);
 });

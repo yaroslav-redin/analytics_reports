@@ -77,7 +77,6 @@ async function _doExport() {
         const qName = dataObj.question_name;
         if (processedQNames.has(qName)) continue;
         processedQNames.add(qName);
-        if (!dataObj.visualize) continue;
 
         const activeRows = dataObj.data.filter(r => r.included !== false);
         if (activeRows.length === 0) continue;
@@ -88,8 +87,11 @@ async function _doExport() {
         });
 
         const opts = dataObj.options || {};
-        const activeBtn = document.querySelector(`#tabs_${id} .viz-tab-btn.active`);
-        const vizTab = activeBtn ? activeBtn.dataset.tab : 'table';
+        let vizTab = null;
+        if (dataObj.visualize) {
+            const activeBtn = document.querySelector(`#tabs_${id} .viz-tab-btn.active`);
+            vizTab = activeBtn ? activeBtn.dataset.tab : 'table';
+        }
 
         questions.push({
             table_num: tableNum++,
@@ -114,7 +116,7 @@ async function _doExport() {
     }
 
     if (questions.length === 0) {
-        showToast('Ни один вопрос из разделов не попал в анализ. Запустите анализ на шаге 5.', 'danger');
+        showToast('Нет данных для экспорта. Убедитесь, что анализ запущен на шаге 5.', 'danger');
         return;
     }
 

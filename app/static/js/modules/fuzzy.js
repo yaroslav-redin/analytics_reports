@@ -39,24 +39,50 @@ function _fuzzyResetPreview() {
 function _fuzzyShowPreview(data, origAnswers) {
     _pendingMergeData = data;
     document.getElementById('fuzzyConfirmBtn').disabled = false;
-    const html = data.map(row => {
-        const from = origAnswers && origAnswers[row.answer];
-        let merged = '';
-        if (from && from.length) {
-            const visible = from.slice(0, 3).map(a => `«${_escHtml(a)}»`).join(', ');
-            const rest = from.slice(3);
-            const moreHtml = rest.length > 0
-                ? `, <span class="fuzzy-more-toggle text-primary" style="cursor:pointer">и ещё ${rest.length}</span>`
-                  + `<span class="fuzzy-more-items d-none">, ${rest.map(a => `«${_escHtml(a)}»`).join(', ')}</span>`
-                : '';
-            merged = ` <small class="text-muted">(+ ${visible}${moreHtml})</small>`;
-        }
-        return `<div class="d-flex justify-content-between align-items-baseline py-1 border-bottom">
-            <span>${_escHtml(row.answer)}${merged}</span>
-            <span class="badge bg-secondary ms-2 flex-shrink-0">${row._total}</span>
-        </div>`;
-    }).join('');
-    document.getElementById('fuzzyPreviewContent').innerHTML = html || '<span class="text-muted">Нет данных.</span>';
+    const content = document.getElementById('fuzzyPreviewContent');
+    content.innerHTML = '';
+
+    if (!data || !data.length) {
+        const span = document.createElement('span');
+        span.className = 'text-muted';
+        span.textContent = 'Нет данных.';
+        content.appendChild(span);
+    } else {
+        data.forEach(row => {
+            const rowEl = _tpl('tpl-fuzzy-preview-row');
+            const textSpan = rowEl.querySelector('.fuzzy-row-text');
+            textSpan.textContent = row.answer;
+            rowEl.querySelector('.fuzzy-row-badge').textContent = row._total;
+
+            const from = origAnswers && origAnswers[row.answer];
+            if (from && from.length) {
+                const small = document.createElement('small');
+                small.className = 'text-muted';
+                const visible = from.slice(0, 3);
+                const rest = from.slice(3);
+                small.appendChild(document.createTextNode(
+                    ` (+ ${visible.map(a => `«${a}»`).join(', ')}`
+                ));
+                if (rest.length > 0) {
+                    small.appendChild(document.createTextNode(', '));
+                    const toggle = document.createElement('span');
+                    toggle.className = 'fuzzy-more-toggle text-primary';
+                    toggle.style.cursor = 'pointer';
+                    toggle.textContent = `и ещё ${rest.length}`;
+                    small.appendChild(toggle);
+                    const moreItems = document.createElement('span');
+                    moreItems.className = 'fuzzy-more-items d-none';
+                    moreItems.textContent = `, ${rest.map(a => `«${a}»`).join(', ')}`;
+                    small.appendChild(moreItems);
+                }
+                small.appendChild(document.createTextNode(')'));
+                textSpan.appendChild(small);
+            }
+
+            content.appendChild(rowEl);
+        });
+    }
+
     document.getElementById('fuzzyPreviewArea').classList.remove('d-none');
 }
 
@@ -147,32 +173,41 @@ document.getElementById('manualRangesBtn').addEventListener('click', () => {
         preRanges = Array.from({ length: n }, (_, i) => ({ lo: i, hi: i + 1, isSingle: false, singleVal: null }));
     }
 
-    document.getElementById('manualRangesBody').innerHTML = preRanges.map((r, i) => `
-        <div class="d-flex align-items-center gap-2 mb-2 manual-range-row">
-            <span class="text-muted small" style="min-width:90px">Диапазон ${i + 1}:</span>
-            <input type="number" class="form-control form-control-sm manual-range-lo" value="${r.isSingle ? r.singleVal : r.lo}" style="width:90px">
-            <span class="text-muted manual-range-sep"${r.isSingle ? ' style="display:none"' : ''}>—</span>
-            <input type="number" class="form-control form-control-sm manual-range-hi" value="${r.hi}" style="width:90px${r.isSingle ? ';display:none' : ''}">
-            <div class="manual-range-single-wrap d-flex align-items-center gap-1 ms-2" style="visibility:${r.isSingle ? 'visible' : 'hidden'}">
-                <div class="form-check form-switch mb-0">
-                    <input class="form-check-input manual-range-single-switch" type="checkbox" role="switch" id="singleSwitch_${i}"${r.isSingle ? ' checked' : ''}>
-                    <label class="form-check-label small text-muted" for="singleSwitch_${i}">Одно число</label>
-                </div>
-            </div>
-        </div>`).join('');
+    const rangesBody = document.getElementById('manualRangesBody');
+    rangesBody.innerHTML = '';
 
-    document.querySelectorAll('#manualRangesBody .manual-range-row').forEach(row => {
-        const wrap = row.querySelector('.manual-range-single-wrap');
-        const sw = row.querySelector('.manual-range-single-switch');
-        const sep = row.querySelector('.manual-range-sep');
-        const hiEl = row.querySelector('.manual-range-hi');
+    preRanges.forEach((r, i) => {
+        const rowEl = _tpl('tpl-manual-range-row');
+        rowEl.querySelector('.manual-range-label').textContent = `Диапазон ${i + 1}:`;
+        rowEl.querySelector('.manual-range-lo').value = r.isSingle ? r.singleVal : r.lo;
+        rowEl.querySelector('.manual-range-hi').value = r.hi;
 
-        row.addEventListener('mouseenter', () => { wrap.style.visibility = 'visible'; });
-        row.addEventListener('mouseleave', () => { if (!sw.checked) wrap.style.visibility = 'hidden'; });
+        const sw = rowEl.querySelector('.manual-range-single-switch');
+        const switchId = `singleSwitch_${i}`;
+        sw.id = switchId;
+        sw.checked = r.isSingle;
+        rowEl.querySelector('.manual-range-single-label').htmlFor = switchId;
+
+        const sep = rowEl.querySelector('.manual-range-sep');
+        const hiEl = rowEl.querySelector('.manual-range-hi');
+        const wrap = rowEl.querySelector('.manual-range-single-wrap');
+
+        if (r.isSingle) {
+            sep.style.display = 'none';
+            hiEl.style.display = 'none';
+            wrap.style.visibility = 'visible';
+        } else {
+            wrap.style.visibility = 'hidden';
+        }
+
+        rowEl.addEventListener('mouseenter', () => { wrap.style.visibility = 'visible'; });
+        rowEl.addEventListener('mouseleave', () => { if (!sw.checked) wrap.style.visibility = 'hidden'; });
         sw.addEventListener('change', () => {
             sep.style.display = sw.checked ? 'none' : '';
             hiEl.style.display = sw.checked ? 'none' : '';
         });
+
+        rangesBody.appendChild(rowEl);
     });
 
     new bootstrap.Modal(document.getElementById('manualRangesModal')).show();

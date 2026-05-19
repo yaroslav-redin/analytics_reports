@@ -1,0 +1,275 @@
+<!-- ==================== HTML-ШАБЛОНЫ (cloneNode) ==================== -->
+
+<!-- Строка легенды файла (sheets.js → renderLegendSettings) -->
+<template id="tpl-legend-item">
+    <div class="d-flex align-items-center border p-2 rounded gap-2">
+        <input type="color" class="form-control form-control-color legend-color-swatch legend-color">
+        <button type="button" class="btn btn-sm btn-outline-secondary random-legend-color-btn" title="Случайный цвет"><i class="fa-solid fa-dice-five"></i></button>
+        <input type="text" class="form-control form-control-sm legend-label-input legend-label" placeholder="Подпись файла">
+    </div>
+</template>
+
+<!-- Вопрос в сортируемом списке (questions.js → addQuestionToSortable) -->
+<template id="tpl-sortable-q-item">
+    <div class="list-group-item d-flex align-items-center question-item">
+        <span class="drag-handle me-3" title="Потяните, чтобы переместить"><i class="fa-solid fa-grip-lines"></i></span>
+        <span class="text-truncate fw-medium text-body flex-grow-1 q-label-span"></span>
+    </div>
+</template>
+
+<!-- Предупреждение об отсутствии маппинга (questions.js) -->
+<template id="tpl-missing-warning">
+    <span class="missing-warning ms-2"><i class="fa-solid fa-circle-exclamation"></i></span>
+</template>
+
+<!-- Кнопка маппинга в sortable-item (questions.js) -->
+<template id="tpl-sortable-mapping-btn">
+    <a class="mapping-btn ms-2" title="Соотнести вручную"><i class="fa-solid fa-link"></i></a>
+</template>
+
+<!-- Блок файла в модалке маппинга (questions.js → openMappingModal) -->
+<template id="tpl-mapping-file-block">
+    <div class="mb-3">
+        <label class="form-label small text-muted fw-semibold mapping-file-label"></label>
+        <select class="mapping-select"></select>
+    </div>
+</template>
+
+<!-- Строка предпросмотра нечёткой группировки (fuzzy.js → _fuzzyShowPreview) -->
+<template id="tpl-fuzzy-preview-row">
+    <div class="d-flex justify-content-between align-items-baseline py-1 border-bottom">
+        <span class="fuzzy-row-text"></span>
+        <span class="badge bg-secondary ms-2 flex-shrink-0 fuzzy-row-badge"></span>
+    </div>
+</template>
+
+<!-- Строка ручного диапазона (fuzzy.js → manualRangesBtn handler) -->
+<template id="tpl-manual-range-row">
+    <div class="d-flex align-items-center gap-2 mb-2 manual-range-row">
+        <span class="text-muted small manual-range-label" style="min-width:90px"></span>
+        <input type="number" class="form-control form-control-sm manual-range-lo" style="width:90px">
+        <span class="text-muted manual-range-sep">—</span>
+        <input type="number" class="form-control form-control-sm manual-range-hi" style="width:90px">
+        <div class="manual-range-single-wrap d-flex align-items-center gap-1 ms-2">
+            <div class="form-check form-switch mb-0">
+                <input class="form-check-input manual-range-single-switch" type="checkbox" role="switch">
+                <label class="form-check-label small text-muted manual-range-single-label">Одно число</label>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Строка таблицы в модалке редактирования диаграммы (charts.js → renderChartEditModal) -->
+<template id="tpl-chart-edit-row">
+    <tr>
+        <td class="control-col">
+            <div class="row-toggle-container row-toggle-visible">
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input modal-row-toggle" type="checkbox">
+                </div>
+            </div>
+        </td>
+        <td class="text-start align-middle">
+            <span contenteditable="true" class="editable-cell modal-answer-text"></span>
+        </td>
+    </tr>
+</template>
+
+<!-- Строка тела таблицы — горизонтальный режим (charts.js → renderTable) -->
+<template id="tpl-table-body-row">
+    <tr>
+        <td class="control-col">
+            <div class="row-toggle-container">
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input row-toggle ui-system-font" type="checkbox" title="Включить/исключить ответ">
+                </div>
+                <button type="button" class="btn-merge-answer" title="Слить с другим ответом"><i class="fa-solid fa-plus"></i></button>
+            </div>
+        </td>
+        <td class="text-start align-middle answer-td" style="position:relative">
+            <span contenteditable="true" class="editable-cell answer-text"></span>
+        </td>
+    </tr>
+</template>
+
+<!-- Карточка раздела в шаге 4 (step4.js → _buildSectionCard) -->
+<template id="tpl-section-card">
+    <div class="card mb-2 section-card">
+        <div class="card-body py-2 px-3">
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <button type="button" class="section-collapse-btn"><i class="fa-solid fa-chevron-down"></i></button>
+                <span class="fw-semibold flex-grow-1 text-truncate section-card-name"></span>
+                <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 add-qs-to-section-btn" title="Добавить выбранные вопросы"><i class="fa-solid fa-plus"></i></button>
+                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 edit-section-btn" title="Редактировать раздел"><i class="fa-solid fa-pen"></i></button>
+                <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 delete-section-btn" title="Удалить раздел"><i class="fa-solid fa-trash-can"></i></button>
+            </div>
+            <div class="section-questions-wrapper">
+                <div class="section-questions-list border rounded p-1"></div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Вопрос внутри раздела (step4.js → _buildSectionQuestion) -->
+<template id="tpl-section-question">
+    <div class="section-question-item">
+        <span class="section-q-drag" title="Переместить"><i class="fa-solid fa-grip-lines"></i></span>
+        <span class="flex-grow-1 text-truncate small fw-medium section-q-name"></span>
+        <button type="button" class="section-q-viz-btn"><i class="fa-solid fa-chart-line"></i></button>
+        <button type="button" class="merge-question-btn"><i class="fa-solid fa-arrows-to-circle"></i></button>
+        <button type="button" class="section-q-remove-btn" title="Убрать из раздела">−</button>
+    </div>
+</template>
+
+<!-- Кнопка маппинга внутри вопроса раздела (step4.js) -->
+<template id="tpl-section-q-mapping-btn">
+    <button type="button" class="section-q-action section-q-mapping-btn"><i class="fa-solid fa-link"></i></button>
+</template>
+
+<!-- Доступный вопрос в шаге 4 (step4.js → _renderAvailableQuestions) -->
+<template id="tpl-available-q-item">
+    <div class="available-q-item">
+        <input type="checkbox" class="form-check-input flex-shrink-0 avail-q-cb cursor-pointer">
+        <span class="flex-grow-1 text-truncate small avail-q-name"></span>
+        <button type="button" class="merge-question-btn" title="Склеить с другим вопросом"><i class="fa-solid fa-arrows-to-circle"></i></button>
+    </div>
+</template>
+
+<!-- Кнопка маппинга для доступного вопроса (step4.js) -->
+<template id="tpl-avail-q-mapping-btn">
+    <button type="button" class="avail-q-mapping-btn"><i class="fa-solid fa-link"></i></button>
+</template>
+
+<!-- Элемент списка склейки вопросов (step4.js → _renderMergeQuestionsList) -->
+<template id="tpl-merge-q-item">
+    <div class="form-check py-1 border-bottom d-flex align-items-start gap-2">
+        <input class="form-check-input flex-shrink-0 mt-1 merge-q-checkbox" type="checkbox">
+        <label class="form-check-label small fw-medium cursor-pointer flex-grow-1 merge-q-label"></label>
+    </div>
+</template>
+
+<!-- Строка прикреплённого донора (step4.js → _renderAttachedDonors) -->
+<template id="tpl-attached-donor-row">
+    <div class="d-flex align-items-center justify-content-between py-1 border-bottom gap-2 attached-donor-row">
+        <span class="small text-truncate flex-grow-1 attached-donor-name"></span>
+        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 detach-donor-btn flex-shrink-0" title="Открепить вопрос">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    </div>
+</template>
+
+<!-- Полный блок результата с вкладками (step5.js → renderItemFull) -->
+<template id="tpl-full-result-item">
+    <div class="full-item-wrapper full-item-open border rounded mb-2" style="border-color:rgba(111,66,193,.35)!important;overflow:hidden;">
+        <div class="full-item-header d-flex align-items-center gap-2 py-1 px-2 ui-system-font" style="background:rgba(111,66,193,.12);">
+            <span class="flex-grow-1 small fw-semibold text-truncate full-item-title" style="color:#6f42c1;"></span>
+            <button type="button" class="full-item-collapse-btn btn btn-sm btn-link p-0 text-secondary" title="Свернуть"><i class="fa-solid fa-chevron-up"></i></button>
+        </div>
+        <div class="full-item-body">
+            <div class="result-item">
+                <ul class="nav nav-tabs ui-system-font full-item-tabs">
+                    <li class="nav-item"><button class="nav-link active viz-tab-btn" data-tab="table" type="button"><i class="fa-solid fa-table me-1"></i>Таблица</button></li>
+                    <li class="nav-item"><button class="nav-link viz-tab-btn" data-tab="bar" type="button"><i class="fa-solid fa-chart-column me-1"></i>Столбчатая</button></li>
+                    <li class="nav-item"><button class="nav-link viz-tab-btn" data-tab="stacked" type="button"><i class="fa-solid fa-chart-bar me-1"></i>Накопленная</button></li>
+                    <li class="nav-item"><button class="nav-link viz-tab-btn" data-tab="pie" type="button"><i class="fa-solid fa-chart-pie me-1"></i>Круговая</button></li>
+                </ul>
+                <div class="ui-system-font chart-settings-panel p-2 mb-3 border border-top-0 border-secondary-subtle rounded-bottom d-flex flex-wrap gap-3 align-items-center shadow-sm full-item-settings">
+                    <div class="form-check mb-0" data-vis-tabs="table">
+                        <input class="form-check-input setting-show-total" type="checkbox" checked>
+                        <label class="form-check-label small fw-medium"><i class="fa-solid fa-sigma me-1 text-muted"></i>Добавить строку "Всего"</label>
+                    </div>
+                    <div class="form-check form-switch mb-0" data-vis-tabs="table bar">
+                        <input class="form-check-input setting-highlight-top" type="checkbox">
+                        <label class="form-check-label small fw-medium"><i class="fa-solid fa-trophy me-1 text-muted"></i>Выделить топ:</label>
+                    </div>
+                    <input type="number" class="form-control form-control-sm setting-top-n input-w-70" value="1" min="1" data-vis-tabs="table bar">
+                    <input type="color" class="form-control form-control-color setting-highlight-color color-input-sm" value="#dc3545" title="Цвет выделения топа" data-vis-tabs="table bar">
+                    <button type="button" class="btn btn-sm btn-outline-secondary random-highlight-color-btn" title="Случайный цвет" data-vis-tabs="table bar"><i class="fa-solid fa-dice-five"></i></button>
+                    <div class="vr" data-vis-tabs="table bar"></div>
+                    <div class="form-check form-switch mb-0" data-vis-tabs="table bar stacked">
+                        <input class="form-check-input setting-vertical" type="checkbox">
+                        <label class="form-check-label small fw-medium"><i class="fa-solid fa-rotate me-1 text-muted"></i>Вертикальный</label>
+                    </div>
+                    <div class="form-check mb-0" data-vis-tabs="bar stacked pie">
+                        <input class="form-check-input setting-show-legend" type="checkbox">
+                        <label class="form-check-label small fw-medium"><i class="fa-solid fa-list-ul me-1 text-muted"></i>Легенда</label>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary ms-auto full-item-hide-col-btn" title="Скрыть столбцы" data-vis-tabs="table"><i class="fa-solid fa-eye-slash"></i></button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary full-item-edit-btn" title="Редактировать данные диаграммы" data-vis-tabs="bar stacked pie"><i class="fa-solid fa-pen"></i></button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary full-item-fuzzy-btn" title="Сгруппировать похожие ответы"><i class="fa-solid fa-shuffle"></i></button>
+                </div>
+                <div class="full-item-pane-table">
+                    <div class="full-item-table-caption mb-3"></div>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-bordered table-hover table-custom-border align-middle mb-0 full-item-table">
+                            <thead></thead><tbody></tbody><tfoot></tfoot>
+                        </table>
+                    </div>
+                </div>
+                <div class="full-item-pane-bar d-none">
+                    <div class="full-item-bar-color-editor"></div>
+                    <div class="chart-container mb-2"><canvas class="full-item-bar-canvas"></canvas></div>
+                    <div class="text-center mb-4 full-item-bar-caption"></div>
+                </div>
+                <div class="full-item-pane-stacked d-none">
+                    <div class="stacked-container mb-2"><canvas class="full-item-stacked-canvas"></canvas></div>
+                    <div class="text-center mb-4 full-item-stacked-caption"></div>
+                </div>
+                <div class="full-item-pane-pie d-none">
+                    <div class="full-item-pie-color-editor"></div>
+                    <div class="d-flex gap-3 flex-wrap full-item-pie-canvases"></div>
+                    <div class="text-center mb-4 full-item-pie-caption"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Простой блок результата (step5.js → renderItemSimple) -->
+<template id="tpl-simple-result-item">
+    <div class="result-item-simple mb-1">
+        <div class="d-flex align-items-center gap-2 py-1 px-2 bg-light simple-item-header border rounded ui-system-font">
+            <span class="flex-grow-1 small fw-semibold text-truncate simple-item-title"></span>
+            <button type="button" class="simple-item-collapse-btn btn btn-sm btn-link p-0 text-secondary" title="Развернуть">
+                <i class="fa-solid fa-chevron-down"></i>
+            </button>
+        </div>
+        <div class="d-none border border-top-0 rounded-bottom p-2 simple-item-body">
+            <div class="d-flex justify-content-end mb-2 ui-system-font">
+                <button type="button" class="btn btn-sm btn-outline-secondary simple-item-fuzzy-btn" title="Сгруппировать похожие ответы"><i class="fa-solid fa-shuffle"></i></button>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover table-custom-border align-middle mb-0 simple-item-table">
+                    <thead></thead><tbody></tbody><tfoot></tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Карточка раздела на шаге 5 (step5.js) -->
+<template id="tpl-report-section-card">
+    <div class="report-section-card mb-4">
+        <div class="report-section-header">
+            <i class="fa-solid fa-layer-group me-2 report-section-icon"></i>
+            <span class="flex-grow-1 report-section-name"></span>
+            <button type="button" class="report-section-collapse-btn" title="Свернуть">
+                <i class="fa-solid fa-chevron-down"></i>
+            </button>
+        </div>
+        <div class="report-section-wrapper">
+            <div class="report-section-body"></div>
+        </div>
+    </div>
+</template>
+
+<!-- Канвас круговой диаграммы для одного файла (step5.js → renderItemFull) -->
+<template id="tpl-pie-canvas-item">
+    <div class="text-center flex-fill">
+        <div class="fw-medium mb-1 ui-system-font small pie-file-label"></div>
+        <div class="pie-container">
+            <canvas class="pie-canvas-el"></canvas>
+            <p class="text-muted small py-3 d-none pie-msg-el"></p>
+        </div>
+    </div>
+</template>

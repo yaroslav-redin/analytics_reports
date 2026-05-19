@@ -112,21 +112,26 @@ function addQuestionToSortable(qName, sourceFileIdx) {
 
     const missingIn = autoMapQuestion(qName, sourceFileIdx ?? 0);
 
-    const warningHtml = missingIn.length > 0
-        ? `<span class="missing-warning ms-2" data-bs-toggle="tooltip" title="Вопрос не найден в: ${_escAttr(missingIn.join(', '))}"><i class="fa-solid fa-circle-exclamation"></i></span>`
-        : '';
+    const item = _tpl('tpl-sortable-q-item');
+    item.dataset.col = qName;
+    const labelSpan = item.querySelector('.q-label-span');
+    labelSpan.textContent = qName;
+    labelSpan.title = qName;
 
-    const mappingBtnHtml = window.processedFiles.length > 1
-        ? `<a class="mapping-btn ms-2" title="Соотнести вручную" data-qname="${_escAttr(qName)}"><i class="fa-solid fa-link"></i></a>`
-        : '';
+    if (missingIn.length > 0) {
+        const warn = _tpl('tpl-missing-warning');
+        warn.dataset.bsToggle = 'tooltip';
+        warn.title = `Вопрос не найден в: ${missingIn.join(', ')}`;
+        item.appendChild(warn);
+    }
 
-    sortableContainer.insertAdjacentHTML('beforeend', `
-        <div class="list-group-item d-flex align-items-center question-item" data-col="${_escAttr(qName)}">
-            <span class="drag-handle me-3" title="Потяните, чтобы переместить"><i class="fa-solid fa-grip-lines"></i></span>
-            <span class="text-truncate fw-medium text-body flex-grow-1" title="${_escAttr(qName)}">${_escHtml(qName)}</span>
-            ${warningHtml}
-            ${mappingBtnHtml}
-        </div>`);
+    if (window.processedFiles.length > 1) {
+        const mapBtn = _tpl('tpl-sortable-mapping-btn');
+        mapBtn.dataset.qname = qName;
+        item.appendChild(mapBtn);
+    }
+
+    sortableContainer.appendChild(item);
 
     initTooltips();
     checkEmptyPlaceholder();
@@ -156,28 +161,53 @@ window.openMappingModal = function (qName) {
     const sourceFileIdx = window.questionSourceFile[qName] ?? 0;
     const sourceFile = window.processedFiles[sourceFileIdx];
     const body = document.getElementById('mappingModalBody');
-    body.innerHTML = `<p class="fw-bold mb-3">Соотнести вопрос:<br><span class="text-primary">${_escHtml(qName)}</span><br><small class="text-muted fw-normal">Источник: ${_escHtml(sourceFile.original_name)}</small></p>`;
+    body.innerHTML = '';
+
+    const p = document.createElement('p');
+    p.className = 'fw-bold mb-3';
+    p.appendChild(document.createTextNode('Соотнести вопрос:\n'));
+    const primarySpan = document.createElement('span');
+    primarySpan.className = 'text-primary';
+    primarySpan.textContent = qName;
+    p.appendChild(primarySpan);
+    p.appendChild(document.createTextNode('\n'));
+    const smallEl = document.createElement('small');
+    smallEl.className = 'text-muted fw-normal';
+    smallEl.textContent = `Источник: ${sourceFile.original_name}`;
+    p.appendChild(smallEl);
+    body.appendChild(p);
 
     if (_isMissingMapping(qName)) {
-        body.innerHTML += `<div class="alert alert-warning py-2 small mb-3"><i class="fa-solid fa-triangle-exclamation me-1"></i>Вопрос не соотнесён со всеми файлами. Выберите соответствующий вопрос в каждом файле ниже или оставьте поле пустым.</div>`;
+        const alert = document.createElement('div');
+        alert.className = 'alert alert-warning py-2 small mb-3';
+        alert.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-1"></i>Вопрос не соотнесён со всеми файлами. Выберите соответствующий вопрос в каждом файле ниже или оставьте поле пустым.';
+        body.appendChild(alert);
     }
 
     for (let i = 0; i < window.processedFiles.length; i++) {
         if (i === sourceFileIdx) continue;
         const f = window.processedFiles[i];
-        const currentMapped = mapping[f.clean_filename] || "";
+        const currentMapped = mapping[f.clean_filename] || '';
 
-        let optionsHtml = `<option value="">-- Не соотносить --</option>`;
+        const block = _tpl('tpl-mapping-file-block');
+        block.querySelector('.mapping-file-label').textContent = `В файле: ${f.original_name}`;
+        const select = block.querySelector('.mapping-select');
+        select.dataset.file = f.clean_filename;
+
+        const optNone = document.createElement('option');
+        optNone.value = '';
+        optNone.textContent = '-- Не соотносить --';
+        select.appendChild(optNone);
+
         f.columns.forEach(c => {
-            const sel = c.name === currentMapped ? 'selected' : '';
-            optionsHtml += `<option value="${c.name}" ${sel}>${c.name}</option>`;
+            const opt = document.createElement('option');
+            opt.value = c.name;
+            opt.textContent = c.name;
+            if (c.name === currentMapped) opt.selected = true;
+            select.appendChild(opt);
         });
 
-        body.innerHTML += `
-            <div class="mb-3">
-                <label class="form-label small text-muted fw-semibold">В файле: ${f.original_name}</label>
-                <select class="mapping-select" data-file="${f.clean_filename}">${optionsHtml}</select>
-            </div>`;
+        body.appendChild(block);
     }
 
     const modalEl = document.getElementById('dataMappingModal');

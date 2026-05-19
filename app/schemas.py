@@ -6,6 +6,7 @@ class ProcessSheetFile(BaseModel):
     sheets: List[str]
 
 class ProcessSheetsRequest(BaseModel):
+    session_id: str
     files: List[ProcessSheetFile]
 
 class ColumnConfig(BaseModel):
@@ -15,6 +16,7 @@ class ColumnConfig(BaseModel):
     merged_columns: List[str] = []
 
 class AnalyzeRequest(BaseModel):
+    session_id: str
     file_labels: Dict[str, str]
     file_colors: Dict[str, str]
     configs: List[ColumnConfig]

@@ -17,7 +17,7 @@ document.getElementById('sheetForm').addEventListener('submit', async (e) => {
         const response = await fetch('/process_sheets', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ files: filesPayload })
+            body: JSON.stringify({ session_id: window.sessionId, files: filesPayload })
         });
         const data = await response.json();
 
@@ -62,11 +62,15 @@ function renderLegendSettings() {
     container.innerHTML = '';
     window.processedFiles.forEach((f, i) => {
         const color = defaultColors[i % defaultColors.length];
-        container.innerHTML += `
-        <div class="d-flex align-items-center border p-2 rounded gap-2">
-            <input type="color" class="form-control form-control-color legend-color-swatch legend-color" data-file="${f.clean_filename}" value="${color}">
-            <button type="button" class="btn btn-sm btn-outline-secondary random-legend-color-btn" data-file="${f.clean_filename}" title="Случайный цвет"><i class="fa-solid fa-dice-five"></i></button>
-            <input type="text" class="form-control form-control-sm legend-label-input legend-label" data-file="${f.clean_filename}" value="${f.original_name.replace(/\.[^.]+$/, '')}" placeholder="Подпись файла">
-        </div>`;
+        const item = _tpl('tpl-legend-item');
+        const colorInput = item.querySelector('.legend-color');
+        colorInput.dataset.file = f.clean_filename;
+        colorInput.value = color;
+        const btn = item.querySelector('.random-legend-color-btn');
+        btn.dataset.file = f.clean_filename;
+        const textInput = item.querySelector('.legend-label');
+        textInput.dataset.file = f.clean_filename;
+        textInput.value = f.original_name.replace(/\.[^.]+$/, '');
+        container.appendChild(item);
     });
 }

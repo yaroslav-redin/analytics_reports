@@ -32,6 +32,11 @@ function updateQuestionsBtn() {
     document.getElementById('toStep4Btn').disabled = !hasQ;
 }
 
+function updateStep6Btn() {
+    const hasData = window.appData && Object.keys(window.appData).length > 0;
+    document.getElementById('toStep6Btn').disabled = !hasData;
+}
+
 function initTooltips() {
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     tooltipTriggerList.map(function (t) { return new bootstrap.Tooltip(t); });
@@ -53,6 +58,7 @@ function _resetFromStep(newStep) {
         window.pieChartsData = {};
         window.renderedTabs = {};
         document.getElementById('reportContent').innerHTML = '';
+        updateStep6Btn();
     }
 
     // Шаг 3 (структура отчёта): очистить разделы

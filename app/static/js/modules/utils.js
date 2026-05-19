@@ -6,6 +6,7 @@ window.questionSourceFile = {};
 window.charts = {};
 window.appData = {};
 window.questionMerges = {};
+window.sessionId = null;
 
 const defaultColors = ['#FF0000', '#4472C4', '#70AD47', '#FFC000', '#ED7D31', '#A5A5A5', '#5B9BD5', '#C00000', '#00B050', '#7030A0'];
 
@@ -53,4 +54,8 @@ function _escAttr(s) {
 
 function randomColor() {
     return '#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0');
+}
+
+function _tpl(id) {
+    return document.getElementById(id).content.cloneNode(true).firstElementChild;
 }
