@@ -68,6 +68,7 @@
             document.documentElement.setAttribute('data-bs-theme', t);
             icon.className = t === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
             localStorage.setItem('theme', t);
+            if (window.updateChartDefaults) window.updateChartDefaults();
         }
         applyTheme(localStorage.getItem('theme') || 'light');
         btn.addEventListener('click', function() {

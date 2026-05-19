@@ -12,7 +12,7 @@ import threading
 
 from app.data_logic import clean_dataframe, generate_report_data, get_column_groups, is_system_column
 from app.schemas import ProcessSheetsRequest, AnalyzeRequest, ExportDocxRequest, AiGroupRequest
-from app.docx_gen import generate_analysis_docx  # noqa: F401 used inside thread
+from app.docx_gen import generate_analysis_docx 
 from app.ai_report import group_answers_openrouter
 
 app = FastAPI(title="Система аналитики опросов МГУ им. Огарева")

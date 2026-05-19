@@ -26,6 +26,7 @@ document.getElementById('reportContent').addEventListener('click', e => {
         if (!simpleBody) return;
         simpleBody.classList.toggle('d-none');
         const isCollapsed = simpleBody.classList.contains('d-none');
+        simpleToggle.closest('.result-item-simple').classList.toggle('open', !isCollapsed);
         simpleToggle.querySelector('i').className = `fa-solid ${isCollapsed ? 'fa-chevron-down' : 'fa-chevron-up'}`;
         simpleToggle.title = isCollapsed ? 'Развернуть' : 'Свернуть';
         return;
@@ -37,6 +38,7 @@ document.getElementById('reportContent').addEventListener('click', e => {
     if (!fullBody) return;
     fullBody.classList.toggle('d-none');
     const isCollapsed = fullBody.classList.contains('d-none');
+    fullBody.closest('.full-item-wrapper')?.classList.toggle('full-item-open', !isCollapsed);
     fullToggle.querySelector('i').className = `fa-solid ${isCollapsed ? 'fa-chevron-down' : 'fa-chevron-up'}`;
     fullToggle.title = isCollapsed ? 'Развернуть' : 'Свернуть';
 });
@@ -153,10 +155,11 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                         </div>
                     </div>`).join('');
 
-                const html = `<div class="d-flex align-items-center gap-2 py-1 px-2 mb-2 border rounded ui-system-font" style="background:rgba(111,66,193,.12);border-color:rgba(111,66,193,.35)!important;">
-                    <span class="flex-grow-1 small fw-semibold text-truncate" style="color:#6f42c1;" title="${_escAttr(item.col_name)}">${_escHtml(item.col_name)}</span>
-                    <button type="button" class="full-item-collapse-btn btn btn-sm btn-link p-0 text-secondary" data-id="${id}" title="Свернуть"><i class="fa-solid fa-chevron-up"></i></button>
-                </div>
+                const html = `<div class="full-item-wrapper full-item-open border rounded mb-2" style="border-color:rgba(111,66,193,.35)!important;overflow:hidden;">
+                    <div class="full-item-header d-flex align-items-center gap-2 py-1 px-2 ui-system-font" style="background:rgba(111,66,193,.12);">
+                        <span class="flex-grow-1 small fw-semibold text-truncate" style="color:#6f42c1;" title="${_escAttr(item.col_name)}">${_escHtml(item.col_name)}</span>
+                        <button type="button" class="full-item-collapse-btn btn btn-sm btn-link p-0 text-secondary" data-id="${id}" title="Свернуть"><i class="fa-solid fa-chevron-up"></i></button>
+                    </div>
                 <div id="full_body_${id}"><div class="result-item">
                     <ul class="nav nav-tabs ui-system-font" id="tabs_${id}">
                         <li class="nav-item"><button class="nav-link active viz-tab-btn" data-id="${id}" data-tab="table"><i class="fa-solid fa-table me-1"></i>Таблица</button></li>
@@ -164,7 +167,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                         <li class="nav-item"><button class="nav-link viz-tab-btn" data-id="${id}" data-tab="stacked"><i class="fa-solid fa-chart-bar me-1"></i>Накопленная</button></li>
                         <li class="nav-item"><button class="nav-link viz-tab-btn" data-id="${id}" data-tab="pie"><i class="fa-solid fa-chart-pie me-1"></i>Круговая</button></li>
                     </ul>
-                    <div class="ui-system-font bg-white p-2 mb-3 border border-top-0 border-secondary-subtle rounded-bottom d-flex flex-wrap gap-3 align-items-center shadow-sm" id="settings_${id}">
+                    <div class="ui-system-font chart-settings-panel p-2 mb-3 border border-top-0 border-secondary-subtle rounded-bottom d-flex flex-wrap gap-3 align-items-center shadow-sm" id="settings_${id}">
                         <div class="form-check mb-0" data-vis-tabs="table">
                             <input class="form-check-input setting-show-total" type="checkbox" id="total_${id}" data-id="${id}" checked>
                             <label class="form-check-label small fw-medium" for="total_${id}"><i class="fa-solid fa-sigma me-1 text-muted"></i>Добавить строку "Всего"</label>
@@ -213,7 +216,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                         <div class="d-flex gap-3 flex-wrap">${pieCanvasesHtml}</div>
                         <div class="text-center mb-4">Рисунок ${fNumPie} – Распределение ответов респондентов на вопрос: «${item.col_name}»</div>
                     </div>
-                </div></div>`;
+                </div></div></div>`;
 
                 container.insertAdjacentHTML('beforeend', html);
                 document.getElementById(`settings_${id}`)?.querySelectorAll('[data-vis-tabs]').forEach(el => {
@@ -238,7 +241,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                 };
                 const html = `
                 <div class="result-item-simple mb-1">
-                    <div class="d-flex align-items-center gap-2 py-1 px-2 bg-light border rounded ui-system-font">
+                    <div class="d-flex align-items-center gap-2 py-1 px-2 bg-light simple-item-header border rounded ui-system-font">
                         <span class="flex-grow-1 small fw-semibold text-truncate" title="${_escAttr(item.col_name)}">${_escHtml(item.col_name)}</span>
                         <button type="button" class="simple-item-collapse-btn btn btn-sm btn-link p-0 text-secondary" data-id="${id}" title="Развернуть">
                             <i class="fa-solid fa-chevron-down"></i>

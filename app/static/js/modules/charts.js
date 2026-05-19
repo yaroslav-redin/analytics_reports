@@ -2,7 +2,22 @@
 Chart.register(ChartDataLabels);
 Chart.defaults.font.family = '"Times New Roman", Times, serif';
 Chart.defaults.font.size = 12;
-Chart.defaults.color = '#000';
+const _chartThemeColor = () => document.documentElement.getAttribute('data-bs-theme') === 'dark' ? '#dee2e6' : '#212529';
+Chart.defaults.color = _chartThemeColor();
+window.updateChartDefaults = () => {
+    Chart.defaults.color = _chartThemeColor();
+    Object.entries(window.charts || {}).forEach(([key, ch]) => {
+        if (!ch || typeof ch.update !== 'function') return;
+        // Bar charts: data labels appear outside bars against background → must follow theme color
+        // Stacked/pie: data labels on colored segments → keep '#fff'
+        if (!key.startsWith('stacked_') && !key.startsWith('pie_')) {
+            if (ch.options.plugins?.datalabels) {
+                ch.options.plugins.datalabels.color = _chartThemeColor();
+            }
+        }
+        ch.update('none');
+    });
+};
 
 const PIE_COLORS = [
     '#dc3545','#0d6efd','#198754','#ffc107','#6f42c1',
@@ -63,7 +78,7 @@ function renderChartEditModal(id) {
 
     body.innerHTML = `
         <table class="table table-bordered table-hover table-custom-border align-middle mb-0">
-            <thead class="table-light">
+            <thead>
                 <tr>
                     <th class="control-col"></th>
                     <th class="text-start">Ответ</th>
@@ -394,7 +409,7 @@ function drawChart(id) {
                     }
                 },
                 datalabels: {
-                    color: '#000',
+                    color: _chartThemeColor(),
                     anchor: 'end',
                     align: isHorizontal ? 'right' : 'top',
                     offset: 4,
@@ -553,7 +568,7 @@ function renderTable(tableId) {
         const isSingleFileVert = dataObj.file_keys.length === 1;
         let theadHtml1 = isSingleFileVert
             ? `<tr id="thead_row1_${tableId}">`
-            : `<tr id="thead_row1_${tableId}"><th class="text-start align-middle main-th-${tableId}" rowspan="2" style="width: 15%;"><span contenteditable="true" class="editable-cell text-dark" data-id="${tableId}" data-header="h1">Файл</span></th>`;
+            : `<tr id="thead_row1_${tableId}"><th class="text-start align-middle main-th-${tableId}" rowspan="2" style="width: 15%;"><span contenteditable="true" class="editable-cell text-body" data-id="${tableId}" data-header="h1">Файл</span></th>`;
         let theadHtml2 = `<tr id="thead_row2_${tableId}">`;
 
         dataObj.data.forEach((row, origIdx) => {
@@ -574,8 +589,8 @@ function renderTable(tableId) {
                     </div>
                 </th>`;
             theadHtml2 += `
-                <th class="text-center count-col-${tableId}"><span contenteditable="true" class="editable-cell text-dark" data-id="${tableId}" data-header="h2">${dataObj.headers.h2 || 'Кол-во'}</span></th>
-                <th class="text-center pct-col-${tableId}"><span contenteditable="true" class="editable-cell text-dark" data-id="${tableId}" data-header="h3">${dataObj.headers.h3 || '%'}</span></th>`;
+                <th class="text-center count-col-${tableId}"><span contenteditable="true" class="editable-cell text-body" data-id="${tableId}" data-header="h2">${dataObj.headers.h2 || 'Кол-во'}</span></th>
+                <th class="text-center pct-col-${tableId}"><span contenteditable="true" class="editable-cell text-body" data-id="${tableId}" data-header="h3">${dataObj.headers.h3 || '%'}</span></th>`;
         });
 
         if (dataObj.options.showTotal) {
@@ -627,22 +642,22 @@ function renderTable(tableId) {
             theadHtml = `
                 <tr id="thead_row1_${tableId}">
                     <th class="control-col main-th-${tableId}"></th>
-                    <th class="text-start align-middle main-th-${tableId}" style="width: 40%;"><span contenteditable="true" class="editable-cell text-dark" data-id="${tableId}" data-header="h1">${dataObj.headers.h1 || 'Ответ'}</span></th>
-                    <th class="text-center count-col-${tableId}"><span contenteditable="true" class="editable-cell text-dark" data-id="${tableId}" data-header="h2">${dataObj.headers.h2 || 'Кол-во ответивших'}</span></th>
-                    <th class="text-center pct-col-${tableId}"><span contenteditable="true" class="editable-cell text-dark" data-id="${tableId}" data-header="h3">${dataObj.headers.h3 || '% от числа ответивших'}</span></th>
+                    <th class="text-start align-middle main-th-${tableId}" style="width: 40%;"><span contenteditable="true" class="editable-cell text-body" data-id="${tableId}" data-header="h1">${dataObj.headers.h1 || 'Ответ'}</span></th>
+                    <th class="text-center count-col-${tableId}"><span contenteditable="true" class="editable-cell text-body" data-id="${tableId}" data-header="h2">${dataObj.headers.h2 || 'Кол-во ответивших'}</span></th>
+                    <th class="text-center pct-col-${tableId}"><span contenteditable="true" class="editable-cell text-body" data-id="${tableId}" data-header="h3">${dataObj.headers.h3 || '% от числа ответивших'}</span></th>
                 </tr>
             `;
         } else {
             theadHtml = `
                 <tr id="thead_row1_${tableId}">
                     <th class="control-col main-th-${tableId}" rowspan="2"></th>
-                    <th class="text-start align-middle main-th-${tableId}" rowspan="2" style="width: 40%;"><span contenteditable="true" class="editable-cell text-dark" data-id="${tableId}" data-header="h1">${dataObj.headers.h1 || 'Ответ'}</span></th>
+                    <th class="text-start align-middle main-th-${tableId}" rowspan="2" style="width: 40%;"><span contenteditable="true" class="editable-cell text-body" data-id="${tableId}" data-header="h1">${dataObj.headers.h1 || 'Ответ'}</span></th>
                     ${dataObj.file_keys.map(fk => `<th class="text-center file-header-${tableId}" colspan="2">${dataObj.file_labels[fk]}</th>`).join('')}
                 </tr>
                 <tr id="thead_row2_${tableId}">
                     ${dataObj.file_keys.map(() => `
-                        <th class="text-center count-col-${tableId}"><span contenteditable="true" class="editable-cell text-dark" data-id="${tableId}" data-header="h2">${dataObj.headers.h2 || 'Кол-во ответивших'}</span></th>
-                        <th class="text-center pct-col-${tableId}"><span contenteditable="true" class="editable-cell text-dark" data-id="${tableId}" data-header="h3">${dataObj.headers.h3 || '% от числа ответивших'}</span></th>
+                        <th class="text-center count-col-${tableId}"><span contenteditable="true" class="editable-cell text-body" data-id="${tableId}" data-header="h2">${dataObj.headers.h2 || 'Кол-во ответивших'}</span></th>
+                        <th class="text-center pct-col-${tableId}"><span contenteditable="true" class="editable-cell text-body" data-id="${tableId}" data-header="h3">${dataObj.headers.h3 || '% от числа ответивших'}</span></th>
                     `).join('')}
                 </tr>
             `;
@@ -699,7 +714,7 @@ function renderTable(tableId) {
             dataObj.file_keys.forEach(fk => {
                 footTd += `<td class="text-center count-col-${tableId}">${totals[fk]}</td><td class="text-center pct-col-${tableId}">${totals[fk] > 0 ? '100' : '0'}</td>`;
             });
-            tableEl.querySelector('tfoot').innerHTML = `<tr class="fw-bold bg-light"><td class="control-col"></td><td class="text-start">Всего</td>${footTd}</tr>`;
+            tableEl.querySelector('tfoot').innerHTML = `<tr class="fw-bold bg-body-secondary"><td class="control-col"></td><td class="text-start">Всего</td>${footTd}</tr>`;
             tableEl.querySelector('tfoot').classList.remove('d-none');
         } else { tableEl.querySelector('tfoot').classList.add('d-none'); }
     }

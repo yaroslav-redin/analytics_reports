@@ -346,3 +346,133 @@ th:hover .row-toggle-container, th.col-excluded .row-toggle-container { opacity:
 [data-bs-theme="dark"] .settings-btn { color: #6c757d; }
 [data-bs-theme="dark"] #themeToggleBtn { transition: opacity 0.2s; }
 #themeToggleBtn { transition: opacity 0.2s; }
+
+/* ===================== GLOBALLY DARKER LIGHT-THEME BORDERS ===================== */
+:root, [data-bs-theme="light"] {
+    --bs-border-color: #bec8d0;
+    --bs-border-color-translucent: rgba(0,0,0,.13);
+    --bs-table-border-color: #bec8d0;
+}
+
+/* ===================== SIMPLE/FULL ITEM HEADER: OPEN STATE ===================== */
+.result-item-simple.open .simple-item-header {
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    border-bottom-color: transparent !important;
+}
+/* Separator под шапкой появляется только когда тело развёрнуто */
+.full-item-wrapper.full-item-open .full-item-header {
+    border-bottom: 1px solid rgba(111,66,193,.35);
+}
+/* Убираем собственный border/margin result-item внутри wrapper */
+.full-item-wrapper .result-item {
+    border-bottom: none !important;
+    margin-bottom: 0 !important;
+    padding: 0.75rem;
+}
+[data-bs-theme="dark"] .full-item-wrapper {
+    border-color: rgba(111,66,193,.55) !important;
+}
+[data-bs-theme="dark"] .full-item-wrapper .full-item-header {
+    background: rgba(111,66,193,.22) !important;
+}
+[data-bs-theme="dark"] .full-item-wrapper.full-item-open .full-item-header {
+    border-bottom-color: rgba(111,66,193,.45) !important;
+}
+
+/* ===================== DARK THEME: BG-LIGHT OVERRIDES ===================== */
+[data-bs-theme="dark"] #legendSettingsBlock {
+    background-color: #252930 !important;
+    border-color: #3d4349 !important;
+}
+[data-bs-theme="dark"] .simple-item-header {
+    background-color: #252930 !important;
+    border-color: #3d4349 !important;
+}
+
+/* ===================== DARK THEME: QUESTION LIST ===================== */
+[data-bs-theme="dark"] #allQuestionsList .q-item-container {
+    color: #dee2e6;
+    background-color: transparent;
+}
+[data-bs-theme="dark"] #allQuestionsList .q-item-container .form-check-label {
+    color: #dee2e6;
+}
+[data-bs-theme="dark"] #allQuestionsList .q-item-container.system-col .form-check-label {
+    color: #6c757d;
+}
+
+/* ===================== DARK THEME: CHART SETTINGS PANEL ===================== */
+.chart-settings-panel { background: #fff; }
+[data-bs-theme="dark"] .chart-settings-panel {
+    background: #252930 !important;
+    border-color: #3d4349 !important;
+}
+
+/* ===================== DARK THEME: CHART & TABLE AREAS ===================== */
+[data-bs-theme="dark"] .chart-container,
+[data-bs-theme="dark"] .stacked-container,
+[data-bs-theme="dark"] .pie-container {
+    background: #2a2f35;
+    border-radius: 8px;
+    padding: 0.75rem;
+}
+
+[data-bs-theme="dark"] #reportContent .table-responsive {
+    background: #252930;
+    border-radius: 6px;
+    padding: 4px;
+}
+
+[data-bs-theme="dark"] .result-item {
+    background: #23272b;
+    border-radius: 10px;
+    padding: 1rem 0.5rem;
+}
+
+[data-bs-theme="dark"] .result-item-simple > div:first-child {
+    border-color: #3d4349 !important;
+}
+
+[data-bs-theme="dark"] .simple_body {
+    border-color: #3d4349 !important;
+}
+
+/* ===================== DARK THEME: SELECT2 (bootstrap-5 theme) ===================== */
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-selection {
+    background-color: #2b3035;
+    border-color: #495057;
+    color: #dee2e6;
+}
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered {
+    color: #dee2e6;
+}
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-selection--single {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23adb5bd' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+}
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-dropdown {
+    background-color: #2b3035;
+    border-color: #495057;
+    color: #dee2e6;
+}
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-dropdown .select2-search .select2-search__field {
+    background-color: #1e2124;
+    border-color: #495057;
+    color: #dee2e6;
+}
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-dropdown .select2-results__options .select2-results__option {
+    color: #dee2e6;
+    background-color: #2b3035;
+}
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-dropdown .select2-results__options .select2-results__option.select2-results__option--highlighted {
+    background-color: #0d6efd;
+    color: #fff;
+}
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-dropdown .select2-results__options .select2-results__option[aria-selected=true]:not(.select2-results__option--highlighted) {
+    background-color: #343a40;
+    color: #dee2e6;
+}
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-selection--single .select2-selection__placeholder,
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-dropdown .select2-results__options .select2-results__option.select2-results__message {
+    color: #6c757d;
+}

@@ -47,7 +47,7 @@ function _renderQuestionsForFile(fileIdx) {
         const cbId = `qcb_${fileIdx}_${colIdx}`;
         const item = document.createElement('div');
         const hiddenClass = isSystem ? 'system-col' + (showHidden ? '' : ' d-none') : '';
-        const labelColor = isSystem ? 'text-secondary' : 'text-dark';
+        const labelColor = isSystem ? 'text-secondary' : 'text-body';
         item.className = `list-group-item d-flex align-items-center gap-2 py-2 q-item-container ${hiddenClass}`;
         item.dataset.qname = qName;
         item.innerHTML = `
@@ -121,9 +121,9 @@ function addQuestionToSortable(qName, sourceFileIdx) {
         : '';
 
     sortableContainer.insertAdjacentHTML('beforeend', `
-        <div class="list-group-item d-flex align-items-center question-item bg-white" data-col="${_escAttr(qName)}">
+        <div class="list-group-item d-flex align-items-center question-item" data-col="${_escAttr(qName)}">
             <span class="drag-handle me-3" title="Потяните, чтобы переместить"><i class="fa-solid fa-grip-lines"></i></span>
-            <span class="text-truncate fw-medium text-dark flex-grow-1" title="${_escAttr(qName)}">${_escHtml(qName)}</span>
+            <span class="text-truncate fw-medium text-body flex-grow-1" title="${_escAttr(qName)}">${_escHtml(qName)}</span>
             ${warningHtml}
             ${mappingBtnHtml}
         </div>`);
@@ -243,7 +243,7 @@ document.getElementById('questionsSearchClear').addEventListener('click', () => 
     filterQuestionsList();
 });
 
-document.getElementById('fileSelectStep3').addEventListener('change', (e) => {
+$('#fileSelectStep3').on('change', function () {
     document.querySelectorAll('#sortableQuestionsList .question-item').forEach(el => {
         delete window.questionMapping[el.dataset.col];
         delete window.questionSourceFile[el.dataset.col];
@@ -251,7 +251,7 @@ document.getElementById('fileSelectStep3').addEventListener('change', (e) => {
     document.getElementById('sortableQuestionsList').innerHTML = '<div class="p-3 text-center text-muted" id="emptySortablePlaceholder"><i class="fa-solid fa-hand-pointer me-1"></i>Выберите вопросы на шаге 3, чтобы они появились здесь</div>';
     document.getElementById('selectAllQuestions').checked = false;
     updateQuestionsBtn();
-    _renderQuestionsForFile(parseInt(e.target.value, 10));
+    _renderQuestionsForFile(parseInt(this.value, 10));
 });
 
 document.getElementById('allQuestionsList').addEventListener('click', (e) => {
