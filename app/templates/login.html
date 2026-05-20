@@ -1,0 +1,81 @@
+<!-- ==================== login.html ==================== -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<script>
+(function(){var t=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-bs-theme',t);})();
+</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход — МГУ им. Огарева | Аналитика опросов</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', path='favicon.svg') }}">
+    <link href="{{ url_for('static', path='css/bootstrap.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', path='css/fontawesome.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', path='css/app.css') }}" rel="stylesheet">
+</head>
+<body class="ui-system-font" style="min-height:100vh;display:flex;flex-direction:column;">
+
+    <nav class="navbar navbar-dark bg-primary shadow-sm">
+        <div class="container-fluid px-4">
+            <span class="navbar-brand"><i class="fa-solid fa-chart-pie me-2"></i>МГУ им. Огарева | Аналитика опросов</span>
+            <button class="btn btn-outline-light btn-sm" id="themeToggleBtn" title="Переключить тему">
+                <i class="fa-solid fa-moon" id="themeIcon"></i>
+            </button>
+        </div>
+    </nav>
+
+    <div class="flex-grow-1 d-flex align-items-center justify-content-center">
+        <div class="card shadow-sm" style="max-width:420px;width:100%;margin:2rem 1rem;">
+            <div class="card-body p-5 text-center">
+                <div class="mb-4">
+                    <i class="fa-solid fa-chart-pie fa-3x text-primary mb-3"></i>
+                    <h4 class="fw-semibold mb-1">Система аналитики опросов</h4>
+                    <p class="text-muted small mb-0">Для работы необходимо войти через ЭИОС</p>
+                </div>
+
+                {% if error %}
+                <div class="alert alert-danger py-2 small mb-4" role="alert">
+                    {% if error == "auth_failed" %}
+                        Авторизация отменена или произошла ошибка на стороне ЭИОС.
+                    {% elif error == "csrf" %}
+                        Ошибка безопасности. Попробуйте ещё раз.
+                    {% elif error == "token_failed" %}
+                        Не удалось получить данные от ЭИОС. Попробуйте позже.
+                    {% elif error == "access_denied" %}
+                        Доступ запрещён. Эта система предназначена только для сотрудников отдела.
+                    {% else %}
+                        Произошла ошибка входа. Попробуйте ещё раз.
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <a href="/auth/login" class="btn btn-primary btn-lg w-100 d-flex align-items-center justify-content-center gap-2">
+                    <i class="fa-solid fa-right-to-bracket"></i>
+                    Войти через ЭИОС
+                </a>
+
+                <p class="text-muted mt-4 mb-0" style="font-size:0.78rem;">
+                    Используйте логин и пароль от личного кабинета<br>МГУ им. Н. П. Огарёва
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', path='js/bootstrap.bundle.min.js') }}"></script>
+    <script>
+    (function(){
+        var btn = document.getElementById('themeToggleBtn');
+        var icon = document.getElementById('themeIcon');
+        function applyTheme(t) {
+            document.documentElement.setAttribute('data-bs-theme', t);
+            icon.className = t === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+            localStorage.setItem('theme', t);
+        }
+        applyTheme(localStorage.getItem('theme') || 'light');
+        btn.addEventListener('click', function() {
+            applyTheme(document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark');
+        });
+    })();
+    </script>
+</body>
+</html>
