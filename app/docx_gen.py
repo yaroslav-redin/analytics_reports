@@ -303,15 +303,18 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
             space_after=3,
         )
 
-        try:
-            system_prompt, user_prompt = _build_question_prompt(q, sec_name, sec_description)
-            analysis = _call_llm(user_prompt, system=system_prompt)
-            _p(doc, analysis, space_after=6)
-            print("  -> OK")
-            time.sleep(10)
-        except Exception as e:
-            print(f"  -> ERROR: {e}")
-            _p(doc, f"Ошибка генерации аналитики: {e}", bold=True, space_after=4)
+        if not q.get('skip_analytics', False):
+            try:
+                system_prompt, user_prompt = _build_question_prompt(q, sec_name, sec_description)
+                analysis = _call_llm(user_prompt, system=system_prompt)
+                _p(doc, analysis, space_after=6)
+                print("  -> OK")
+                time.sleep(10)
+            except Exception as e:
+                print(f"  -> ERROR: {e}")
+                _p(doc, f"Ошибка генерации аналитики: {e}", bold=True, space_after=4)
+        else:
+            print("  -> Аналитика пропущена (skip_analytics=True)")
 
         insert_visualization(doc, q, chart_counter, table_counter)
 

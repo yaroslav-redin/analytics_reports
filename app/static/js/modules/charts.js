@@ -513,6 +513,81 @@ function drawChart(id) {
     });
 }
 
+function drawChartOnCanvas(sourceId, canvasId, colorEditorId) {
+    const dataObj = window.appData[sourceId];
+    if (!dataObj) return;
+
+    const chartKey = `both_${sourceId}`;
+    if (window.charts[chartKey]) window.charts[chartKey].destroy();
+
+    const activeData = dataObj.data.filter(r => r.included).sort((a, b) => b._total - a._total);
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || activeData.length === 0) return;
+
+    const labels = activeData.map(r => r.answer.length > 50 ? r.answer.substring(0, 50) + '...' : r.answer);
+    const isHorizontal = dataObj.options.chartDirection === 'y';
+
+    const fileTotals = {};
+    dataObj.file_keys.forEach(fk => {
+        fileTotals[fk] = activeData.reduce((sum, r) => sum + (r.counts[fk] || 0), 0);
+    });
+
+    const isSingleFile = dataObj.file_keys.length === 1;
+    const datasets = dataObj.file_keys.map(fileKey => {
+        const ft = fileTotals[fileKey];
+        const rawCounts = activeData.map(r => r.counts[fileKey] || 0);
+        return {
+            label: dataObj.file_labels[fileKey],
+            backgroundColor: activeData.map((r, barIdx) =>
+                isSingleFile ? (dataObj.barColors[barIdx] || PIE_COLORS[barIdx % PIE_COLORS.length]) : dataObj.file_colors[fileKey]
+            ),
+            data: rawCounts.map(c => ft > 0 ? (c / ft) * 100 : 0),
+            rawCounts,
+            barPercentage: 0.8
+        };
+    });
+
+    const ctx = canvas.getContext('2d');
+    ctx.canvas.height = isHorizontal ? Math.max(200, labels.length * 36) : 400;
+
+    window.charts[chartKey] = new Chart(ctx, {
+        type: 'bar',
+        data: { labels, datasets },
+        options: {
+            indexAxis: dataObj.options.chartDirection,
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: !!dataObj.options.showLegend, position: 'bottom' },
+                tooltip: {
+                    enabled: true,
+                    callbacks: {
+                        title: (items) => activeData[items[0].dataIndex]?.answer || '',
+                        label: (ctx) => ctx.dataset.rawCounts[ctx.dataIndex]
+                    }
+                },
+                datalabels: {
+                    color: _chartThemeColor(),
+                    anchor: 'end',
+                    align: isHorizontal ? 'right' : 'top',
+                    offset: 4,
+                    font: { family: '"Times New Roman", Times, serif', size: 14, weight: 'bold' },
+                    formatter: (value) => {
+                        if (!value || value === 0) return '';
+                        if (value > 0 && value < 1) return '<1%';
+                        return Math.round(value) + '%';
+                    }
+                }
+            },
+            scales: {
+                x: { display: !isHorizontal, grid: { display: false }, border: { display: false } },
+                y: { display: isHorizontal, grid: { display: false }, border: { display: false } }
+            },
+            layout: { padding: isHorizontal ? { right: 50 } : { top: 30 } }
+        }
+    });
+}
+
 // ===================== STACKED BAR CHART =====================
 function drawStackedChart(id) {
     const dataObj = window.appData[id];

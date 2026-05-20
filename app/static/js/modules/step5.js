@@ -122,7 +122,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
 
             const renderItemFull = (item, container) => {
                 const id = `item_${globalItemIdx++}`;
-                window.renderedTabs[id] = { bar: false, stacked: false, pie: false };
+                window.renderedTabs[id] = { bar: false, stacked: false, pie: false, both: false }; //changed
                 window.chartsData[id] = true;
                 window.stackedChartsData[id] = true;
                 window.pieChartsData[id] = true;
@@ -130,7 +130,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                 window.appData[id] = {
                     question_name: item.col_name,
                     visualize: true,
-                    options: { showTotal: true, highlightTop: false, topN: 1, chartDirection: 'y', highlightColor: '#dc3545', hiddenCol: 'none', tableVertical: false, showLegend: item.file_keys.length > 1 },
+                    options: { showTotal: true, highlightTop: false, topN: 1, chartDirection: 'y', highlightColor: '#dc3545', hiddenCol: 'none', tableVertical: false, showLegend: item.file_keys.length > 1, skipAnalytics: false }, //changed
                     headers: { h1: "Ответ", h2: "Кол-во ответивших", h3: "% от числа ответивших" },
                     data: item.data,
                     file_keys: item.file_keys,
@@ -214,10 +214,21 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
 
                 el.querySelector('.full-item-pie-caption').textContent =
                     `Рисунок ${fNumPie} – Распределение ответов респондентов на вопрос: «${item.col_name}»`;
-
+                //А оно не дублируется?    
+                el.querySelector('.full-item-pane-both').id = `pane_both_${id}`;
+                el.querySelector('.full-item-both-table-caption').textContent =
+                    `Таблица ${tNum} – Распределение ответов респондентов на вопрос: «${item.col_name}»`;
+                const bothTable = el.querySelector('.full-item-both-table');
+                bothTable.id = `both_table_${id}`;
+                el.querySelector('.full-item-both-bar-color-editor').id = `both_bar_color_editor_${id}`;
+                el.querySelector('.full-item-both-bar-canvas').id = `both_canvas_${id}`;
+                el.querySelector('.full-item-both-bar-caption').textContent =
+                    `Рисунок ${fNumBar} – Распределение ответов респондентов на вопрос: «${item.col_name}»`;
+                
                 settings.querySelectorAll('[data-vis-tabs]').forEach(settEl => {
                     settEl.classList.toggle('d-none', !settEl.dataset.visTabs.split(' ').includes('table'));
                 });
+
 
                 container.appendChild(el);
                 renderTable(id);
@@ -228,7 +239,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                 window.appData[id] = {
                     question_name: item.col_name,
                     visualize: false,
-                    options: { showTotal: true, highlightTop: false, topN: 1, chartDirection: 'y', highlightColor: '#dc3545', hiddenCol: 'none', tableVertical: false, showLegend: false },
+                    options: { showTotal: true, highlightTop: false, topN: 1, chartDirection: 'y', highlightColor: '#dc3545', hiddenCol: 'none', tableVertical: false, showLegend: false, skipAnalytics: false }, //changed
                     headers: { h1: "Ответ", h2: "Кол-во ответивших", h3: "% от числа ответивших" },
                     data: item.data,
                     file_keys: item.file_keys,
@@ -408,7 +419,7 @@ document.addEventListener('click', e => {
     document.querySelectorAll(`#tabs_${id} .viz-tab-btn`).forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
 
-    ['table', 'bar', 'stacked', 'pie'].forEach(t => {
+    ['table', 'bar', 'stacked', 'pie', 'both'].forEach(t => {
         const pane = document.getElementById(`pane_${t}_${id}`);
         if (pane) pane.classList.toggle('d-none', t !== tab);
     });
@@ -433,4 +444,55 @@ document.addEventListener('click', e => {
         window.renderedTabs[id].pie = true;
         setTimeout(() => drawPieChart(id), 50);
     }
+    if (tab === 'both' && !window.renderedTabs[id].both) {
+    window.renderedTabs[id].both = true;
+    const dataObj = window.appData[id];
+    if (dataObj) {
+        // Создаём временную копию appData для рендера в другую таблицу
+        const bothId = `both_table_${id}`;
+        window.appData[bothId] = JSON.parse(JSON.stringify(dataObj));
+        window.appData[bothId].question_name = dataObj.question_name;
+        setTimeout(() => {
+            renderTable(bothId);
+            // Рендерим диаграмму на канвасе both
+            const origCanvasId = dataObj._bothCanvasId || `both_canvas_${id}`;
+            drawChartOnCanvas(id, origCanvasId, `both_bar_color_editor_${id}`);
+        }, 50);
+    }
+}
+const skipBtn = e.target.closest('.full-item-skip-analytics-btn');
+if (skipBtn) {
+    const id = skipBtn.closest('[id^="pane_"], .full-item-wrapper')
+        ?.querySelector('[data-id]')?.dataset?.id
+        || skipBtn.closest('.full-item-wrapper')
+            ?.querySelector('.full-item-collapse-btn')?.dataset?.id;
+    if (id && window.appData[id]) {
+        const current = window.appData[id].options.skipAnalytics;
+        window.appData[id].options.skipAnalytics = !current;
+        skipBtn.classList.toggle('active', !current);
+        skipBtn.classList.toggle('btn-outline-secondary', current);
+        skipBtn.classList.toggle('btn-danger', !current);
+        skipBtn.title = !current
+            ? 'Аналитика отключена (нажмите чтобы включить)'
+            : 'Не генерировать аналитику для этого вопроса';
+    }
+    return;
+}
+
+const simpleSkipBtn = e.target.closest('.simple-item-skip-analytics-btn');
+if (simpleSkipBtn) {
+    const id = simpleSkipBtn.closest('.simple-item-body')
+        ?.querySelector('.simple-item-table')?.id;
+    if (id && window.appData[id]) {
+        const current = window.appData[id].options.skipAnalytics;
+        window.appData[id].options.skipAnalytics = !current;
+        simpleSkipBtn.classList.toggle('active', !current);
+        simpleSkipBtn.classList.toggle('btn-outline-secondary', current);
+        simpleSkipBtn.classList.toggle('btn-danger', !current);
+        simpleSkipBtn.title = !current
+            ? 'Аналитика отключена (нажмите чтобы включить)'
+            : 'Не генерировать аналитику для этого вопроса';
+    }
+    return;
+}
 });

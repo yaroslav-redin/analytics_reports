@@ -69,6 +69,7 @@ async function _doExport() {
                 chart_direction: opts.chartDirection || 'y',
                 show_legend: opts.showLegend !== false,
                 hidden_col: opts.hiddenCol || 'none',
+                skip_analytics: window.appData[id]?.options?.skipAnalytics === true,
             });
         }
     }
@@ -113,6 +114,7 @@ async function _doExport() {
             chart_direction: opts.chartDirection || 'y',
             show_legend: opts.showLegend !== false,
             hidden_col: opts.hiddenCol || 'none',
+            skip_analytics: window.appData[id]?.options?.skipAnalytics === true, //changed
         });
     }
 
