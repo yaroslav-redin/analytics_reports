@@ -1,0 +1,49 @@
+<!-- ШАГ 6: Генерация ИИ-отчёта -->
+<div class="wizard-step" id="wizardStep5">
+    <div class="wizard-card">
+        <div class="wizard-step-header">
+            <span class="wizard-step-num">6</span>
+            <h4 class="wizard-step-title">Генерация ИИ-отчёта</h4>
+            <span class="step-help-icon ms-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Генерация аналитического текста через OpenRouter API."><i class="fa-regular fa-circle-question"></i></span>
+        </div>
+        <p class="text-muted mb-4">
+            Нажмите кнопку, чтобы сгенерировать аналитический отчёт и скачать его в формате Word.
+        </p>
+
+        <div class="d-flex flex-column gap-3" style="max-width:780px;margin:0 auto;">
+
+            <div class="mx-auto" style="max-width:390px;width:100%;">
+                <label for="exportFilenameInput" class="form-label text-muted small mb-1"><span class="text-muted fw-normal"></span></label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="exportFilenameInput"
+                           placeholder="Название файла" maxlength="200">
+                    <span class="input-group-text text-muted">.docx</span>
+                </div>
+            </div>
+
+            <div class="p-3 d-flex gap-2 mx-auto" style="max-width:390px;width:100%;">
+                <button type="button" class="btn btn-primary flex-fill" id="downloadApiBtn">
+                    <i class="fa-solid fa-file-arrow-down me-2"></i>Скачать отчёт
+                </button>
+                <button type="button" class="btn btn-outline-danger flex-fill" id="exportStopBtn" disabled>
+                    <i class="fa-solid fa-stop me-1"></i>Остановить
+                </button>
+            </div>
+
+            <!-- Прогресс -->
+            <div id="exportProgressContainer" class="d-none">
+                <div class="progress mb-1" style="height:36px;border-radius:8px;position:relative;">
+                    <div id="exportProgressBar"
+                         class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                         role="progressbar" style="width:0%;"></div>
+                    <span id="exportProgressText"
+                          style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:0.9rem;font-weight:600;color:#fff;text-shadow:0 0 6px rgba(0,0,0,0.9),0 0 12px rgba(0,0,0,0.7),0 1px 3px rgba(0,0,0,0.8);pointer-events:none;"></span>
+                </div>
+                <small id="exportProgressLabel" class="text-muted d-block text-center text-truncate"></small>
+                <small id="exportTimerLabel" class="text-muted d-block text-center mt-1"
+                       style="font-variant-numeric:tabular-nums;letter-spacing:0.05em;">00:00</small>
+            </div>
+
+        </div>
+    </div>
+</div>

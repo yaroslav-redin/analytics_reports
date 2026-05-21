@@ -1,0 +1,76 @@
+// ===================== SHEET FORM =====================
+document.getElementById('sheetForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const checkedBoxes = document.querySelectorAll('.sheet-checkbox:checked');
+    const filesPayload = [];
+    window.uploadedFiles.forEach(f => {
+        const selectedSheets = Array.from(checkedBoxes).filter(cb => cb.dataset.filename === f.filename).map(cb => cb.value);
+        if (selectedSheets.length > 0) {
+            filesPayload.push({ filename: f.filename, sheets: selectedSheets });
+        }
+    });
+
+    document.getElementById('processSheetsBtn').disabled = true;
+    document.getElementById('sheetSpinner').classList.remove('d-none');
+
+    try {
+        const response = await fetch('/process_sheets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: window.sessionId, files: filesPayload })
+        });
+        const data = await response.json();
+
+        if (response.ok) {
+            window.processedFiles = data.processed_files;
+            window.questionMapping = {};
+            window.reportSections = [];
+
+            renderQuestionsStep3();
+            goToStep(2);
+        } else { showToast(data.message, 'danger'); }
+    } catch (err) { showToast('Ошибка соединения с сервером', 'danger'); }
+    finally {
+        updateSheetBtn();
+        document.getElementById('sheetSpinner').classList.add('d-none');
+    }
+});
+
+document.getElementById('selectAllSheets').addEventListener('change', (e) => {
+    document.querySelectorAll('.sheet-checkbox').forEach(cb => cb.checked = e.target.checked);
+    updateSheetBtn();
+});
+
+document.getElementById('sheetCheckboxesContainer').addEventListener('change', (e) => {
+    if (e.target.classList.contains('sheet-checkbox')) {
+        const total = document.querySelectorAll('.sheet-checkbox').length;
+        const checked = document.querySelectorAll('.sheet-checkbox:checked').length;
+        document.getElementById('selectAllSheets').checked = (total === checked && total > 0);
+        updateSheetBtn();
+    }
+});
+
+// ===================== LEGEND SETTINGS =====================
+function renderLegendSettings() {
+    const block = document.getElementById('legendSettingsBlock');
+    const container = document.getElementById('legendInputsContainer');
+    if (!window.processedFiles || window.processedFiles.length <= 1) {
+        if (block) block.style.display = 'none';
+        return;
+    }
+    if (block) block.style.display = '';
+    container.innerHTML = '';
+    window.processedFiles.forEach((f, i) => {
+        const color = defaultColors[i % defaultColors.length];
+        const item = _tpl('tpl-legend-item');
+        const colorInput = item.querySelector('.legend-color');
+        colorInput.dataset.file = f.clean_filename;
+        colorInput.value = color;
+        const btn = item.querySelector('.random-legend-color-btn');
+        btn.dataset.file = f.clean_filename;
+        const textInput = item.querySelector('.legend-label');
+        textInput.dataset.file = f.clean_filename;
+        textInput.value = f.original_name.replace(/\.[^.]+$/, '');
+        container.appendChild(item);
+    });
+}
