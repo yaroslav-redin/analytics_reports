@@ -73,6 +73,8 @@ DEFAULTS: dict = {
     "llm_temperature":           "0.4",
     "llm_sleep_between_calls":   "3",
     "llm_request_timeout":       "120",
+    "llm_group_batch_size":      "50",
+    "llm_group_max_concurrency": "3",
     # Prompts
     "prompt_style_example":      _STYLE_EXAMPLE,
     "prompt_system_role":        _SYSTEM_ROLE,
