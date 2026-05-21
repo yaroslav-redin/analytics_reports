@@ -262,7 +262,7 @@ def insert_visualization(doc, q: dict, chart_counter: list, table_counter: list 
         _insert_word_table(doc, q)
 
     elif viz_tab == 'both':
-    # Подпись над таблицей
+        # Подпись над таблицей
         t_num = table_counter[0]
         table_counter[0] += 1
         _add_caption(

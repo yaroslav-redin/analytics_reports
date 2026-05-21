@@ -17,6 +17,7 @@ async function _doExport() {
     // Индекс question_name → id в appData для быстрого поиска
     const nameToId = {};
     for (const id of Object.keys(window.appData)) {
+        if (id.startsWith('both_table_')) continue;  // пропускаем копии для both-панели
         const qName = window.appData[id].question_name;
         if (qName) nameToId[qName] = id;
     }
@@ -160,6 +161,13 @@ async function _doExport() {
     }, 1000);
 
     try {
+
+        console.table(questions.map(q => ({
+            name: q.question_name.substring(0, 30),
+            viz_tab: q.viz_tab,
+            both_chart_type: q.both_chart_type,
+            skip: q.skip_analytics
+        })));
 
         const response = await fetch('/export_docx_stream', {
             method: 'POST',
