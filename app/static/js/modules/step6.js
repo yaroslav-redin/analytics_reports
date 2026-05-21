@@ -3,6 +3,14 @@
 
 let _exportAbortController = null;
 
+// Цвета хранятся индексами по активным строкам (отсортированным по _total desc).
+// Срезаем по количеству активных строк, чтобы не отправлять лишние.
+function _collectColorsForActive(dataObj, colorsArr) {
+    if (!Array.isArray(colorsArr)) return [];
+    const activeLen = dataObj.data.filter(r => r.included !== false).length;
+    return colorsArr.slice(0, activeLen);
+}
+
 document.getElementById('exportStopBtn').addEventListener('click', () => {
     if (_exportAbortController) _exportAbortController.abort();
 });
@@ -36,7 +44,9 @@ async function _doExport() {
             processedQNames.add(qName);
 
             const dataObj = window.appData[id];
-            const activeRows = dataObj.data.filter(r => r.included !== false);
+            const activeRows = dataObj.data
+                .filter(r => r.included !== false)
+                .sort((a, b) => (b._total || 0) - (a._total || 0));
             if (activeRows.length === 0) continue;
 
             const fileTotals = {};
@@ -71,11 +81,14 @@ async function _doExport() {
                 show_total: opts.showTotal !== false,
                 section: { name: sec.name, description: sec.description || '', color: sec.color || '' },
                 viz_tab: vizTab,
-                both_chart_type: window.appData[id]?._lastChartTab || 'bar',  // ← ДОБАВИТЬ
+                both_chart_type: window.appData[id]?._lastChartTab || 'bar',
                 chart_direction: opts.chartDirection || 'y',
                 show_legend: opts.showLegend !== false,
                 hidden_col: opts.hiddenCol || 'none',
                 skip_analytics: window.appData[id]?.options?.skipAnalytics === true,
+                pie_colors: _collectColorsForActive(dataObj, dataObj.pieColors),
+                bar_colors: _collectColorsForActive(dataObj, dataObj.barColors),
+                file_colors: dataObj.file_colors || {},
             });
         }
     }
@@ -86,7 +99,9 @@ async function _doExport() {
         if (processedQNames.has(qName)) continue;
         processedQNames.add(qName);
 
-        const activeRows = dataObj.data.filter(r => r.included !== false);
+        const activeRows = dataObj.data
+            .filter(r => r.included !== false)
+            .sort((a, b) => (b._total || 0) - (a._total || 0));
         if (activeRows.length === 0) continue;
 
         const fileTotals = {};
@@ -118,13 +133,16 @@ async function _doExport() {
             })),
             file_totals: fileTotals,
             show_total: opts.showTotal !== false,
-            section: null,  // без раздела
+            section: null,
             viz_tab: vizTab,
             both_chart_type: window.appData[id]?._lastChartTab || 'bar',
             chart_direction: opts.chartDirection || 'y',
             show_legend: opts.showLegend !== false,
             hidden_col: opts.hiddenCol || 'none',
-            skip_analytics: window.appData[id]?.options?.skipAnalytics === true, //changed
+            skip_analytics: window.appData[id]?.options?.skipAnalytics === true,
+            pie_colors: _collectColorsForActive(dataObj, dataObj.pieColors),
+            bar_colors: _collectColorsForActive(dataObj, dataObj.barColors),
+            file_colors: dataObj.file_colors || {},
         });
     }
 

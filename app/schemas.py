@@ -49,6 +49,9 @@ class ExportQuestion(BaseModel):
     hidden_col: str = 'none'             # 'none' | 'count' | 'percent'
     skip_analytics: bool = False
     both_chart_type: str = 'bar'
+    pie_colors: List[str] = []        # цвет каждой активной строки для круговой
+    bar_colors: List[str] = []        # цвет каждой активной строки для столбчатой (single-file)
+    file_colors: Dict[str, str] = {}  # цвет каждого файла (multi-file: bar/stacked)
 
 class ExportDocxRequest(BaseModel):
     questions: List[ExportQuestion]
