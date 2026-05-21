@@ -49,7 +49,7 @@ _WRITING_RULES = """\
   «такое сочетание сигнализирует о...», «вместе с тем картина не однородна».
 — Формулируй выводы конкретно — не «необходимо улучшить», а что именно и почему.
 — Все слова не на русском языке переводи на русский.
-— Объём: 3–5 предложений."""
+— Объём: 4–6 предложений."""
 
 _SYSTEM_ROLE = """\
 Ты — аналитик социологических исследований в Мордовском Государственном Университете им Н.П. Огарёва.
@@ -79,10 +79,11 @@ DEFAULTS: dict = {
     # LLM
     "openrouter_api_key":        os.getenv("OPENROUTER_API_KEY", ""),
     "openrouter_model":          os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free"),
-    "llm_max_tokens_analysis":   "3000",
+    "llm_max_tokens_analysis":   "600",
     "llm_max_tokens_grouping":   "2000",
-    "llm_temperature":           "0.7",
-    "llm_sleep_between_calls":   "10",
+    "llm_temperature":           "0.4",
+    "llm_sleep_between_calls":   "3",
+    "llm_request_timeout":       "120",
     # Prompts
     "prompt_style_example":      _STYLE_EXAMPLE,
     "prompt_system_role":        _SYSTEM_ROLE,

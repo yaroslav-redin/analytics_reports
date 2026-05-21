@@ -1,10 +1,55 @@
 import io
 import time
+import random
 from openai import OpenAI
 from docx import Document
 from docx.shared import Pt, Cm
 from app.chart_gen import insert_visualization
 from app import config as cfg
+
+
+# ===================== SINGLETON КЛИЕНТ И PACING =====================
+
+_openrouter_client: OpenAI | None = None
+_openrouter_client_key: str = ""
+_LAST_REQUEST_TIME: float = 0.0
+
+
+def get_openrouter_client() -> OpenAI:
+    """Один TCP-клиент на всё приложение. Пересоздаётся, если ключ изменился через настройки."""
+    global _openrouter_client, _openrouter_client_key
+    key = cfg.get("openrouter_api_key")
+    if not key:
+        raise ValueError("OPENROUTER_API_KEY не задан (проверьте .env или Настройки)")
+    if _openrouter_client is None or _openrouter_client_key != key:
+        _openrouter_client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=key,
+            timeout=cfg.get_float("llm_request_timeout"),
+        )
+        _openrouter_client_key = key
+    return _openrouter_client
+
+
+def _pace():
+    """Адаптивная пауза: ждём только если с прошлого запроса прошло меньше min_interval."""
+    global _LAST_REQUEST_TIME
+    min_interval = cfg.get_float("llm_sleep_between_calls")
+    delta = time.time() - _LAST_REQUEST_TIME
+    if delta < min_interval:
+        time.sleep(min_interval - delta)
+
+
+def _mark_request_done():
+    global _LAST_REQUEST_TIME
+    _LAST_REQUEST_TIME = time.time()
+
+
+def _backoff_wait(attempt: int):
+    """Экспоненциальный backoff с jitter: 2/4/8/16/32с (capped at 60) + random 0.5..2."""
+    wait = min(60.0, (2 ** (attempt + 1)) + random.uniform(0.5, 2.0))
+    print(f"  -> Rate limit (попытка {attempt + 1}), жду {wait:.1f}с...")
+    time.sleep(wait)
 
 
 # ===================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====================
@@ -161,16 +206,14 @@ def _build_question_prompt(
 # ===================== ВЫЗОВ МОДЕЛИ =====================
 
 def _call_llm(prompt: str, system: str = "") -> str:
-    key = cfg.get("openrouter_api_key")
-    if not key:
-        raise ValueError("OPENROUTER_API_KEY не задан (проверьте .env или Настройки)")
-    client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=key)
+    client = get_openrouter_client()
     messages = []
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
 
-    for attempt in range(5):
+    _pace()
+    for attempt in range(6):
         try:
             response = client.chat.completions.create(
                 model=cfg.get("openrouter_model"),
@@ -178,12 +221,11 @@ def _call_llm(prompt: str, system: str = "") -> str:
                 max_tokens=cfg.get_int("llm_max_tokens_analysis"),
                 temperature=cfg.get_float("llm_temperature"),
             )
+            _mark_request_done()
             return response.choices[0].message.content.strip()
         except Exception as e:
-            if "429" in str(e) and attempt < 4:
-                wait = 15 * (attempt + 1)
-                print(f"  -> Rate limit, жду {wait}с...")
-                time.sleep(wait)
+            if "429" in str(e) and attempt < 5:
+                _backoff_wait(attempt)
             else:
                 raise
 
@@ -232,7 +274,6 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
             analysis = _call_llm(user_prompt, system=system_prompt)
             _p(doc, analysis, space_after=6)
             print("  -> OK")
-            time.sleep(cfg.get_int("llm_sleep_between_calls"))
         except Exception as e:
             print(f"  -> ERROR: {e}")
             _p(doc, f"Ошибка генерации аналитики: {e}", bold=True, space_after=4)

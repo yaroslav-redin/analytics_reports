@@ -1,8 +1,7 @@
 import json
 import re
-import time
-from openai import OpenAI
 from app import config as cfg
+from app.docx_gen import get_openrouter_client, _pace, _mark_request_done, _backoff_wait
 
 
 def _extract_json(text: str) -> dict:
@@ -32,12 +31,10 @@ def _parse_group_response(raw: str, answers: list[str]) -> list[dict]:
 
 
 def group_answers_openrouter(answers: list, question_name: str) -> list:
-    key = cfg.get("openrouter_api_key")
-    if not key:
-        raise ValueError("OPENROUTER_API_KEY не задан (проверьте .env или Настройки)")
     prompt = _build_group_prompt(answers, question_name)
-    client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=key)
-    for attempt in range(5):
+    client = get_openrouter_client()
+    _pace()
+    for attempt in range(6):
         try:
             response = client.chat.completions.create(
                 model=cfg.get("openrouter_model"),
@@ -45,9 +42,10 @@ def group_answers_openrouter(answers: list, question_name: str) -> list:
                 max_tokens=cfg.get_int("llm_max_tokens_grouping"),
                 temperature=cfg.get_float("llm_temperature"),
             )
+            _mark_request_done()
             return _parse_group_response(response.choices[0].message.content.strip(), answers)
         except Exception as e:
-            if "429" in str(e) and attempt < 4:
-                time.sleep(15 * (attempt + 1))
+            if "429" in str(e) and attempt < 5:
+                _backoff_wait(attempt)
             else:
                 raise
