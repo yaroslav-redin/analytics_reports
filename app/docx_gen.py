@@ -131,9 +131,6 @@ def generate_data_docx(questions: list) -> bytes:
         file_totals = q["file_totals"]
         is_single = len(file_keys) == 1
 
-        _p(doc, f"Вопрос {q['table_num']} – «{q['question_name']}»",
-           bold=True, space_before=10, space_after=2)
-
         for row in q["rows"]:
             if is_single:
                 fk = file_keys[0]
@@ -363,6 +360,8 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
     total_questions = len(questions)
     _last_section = None
     chart_counter = [1]
+    table_counter = [1]
+    part_counter = [1]
 
     print(
         f"Параллельная генерация {total_questions} вопросов "
@@ -393,21 +392,12 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
             if sec_description:
                 _p(doc, sec_description, size=11, space_after=6)
 
-        _p(
-            doc,
-            f"Вопрос {q['table_num']} — «{q['question_name']}»",
-            bold=True,
-            size=12,
-            space_before=8,
-            space_after=3,
-        )
-
         result = texts[idx - 1] or {}
         if not result.get("skipped") and result.get("text"):
             bold = bool(result.get("error"))
             _p(doc, result["text"], bold=bold, space_after=6)
 
-        insert_visualization(doc, q, chart_counter)
+        insert_visualization(doc, q, chart_counter, table_counter, part_counter)
 
     buf = io.BytesIO()
     doc.save(buf)

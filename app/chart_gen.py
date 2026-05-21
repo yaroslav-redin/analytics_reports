@@ -1,3 +1,4 @@
+# ===================== chart_gen.py =====================
 """
 Embedding OOXML charts and Word tables into python-docx documents.
 Charts are embedded as proper Excel charts (editable by double-click in Word),
@@ -30,6 +31,63 @@ def _x(s: object) -> str:
     return str(s).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
 
 
+def _color_hex(c) -> str:
+    """Привести цвет к OOXML-формату: 6 hex-символов без '#'."""
+    if not c or not isinstance(c, str):
+        return ''
+    c = c.strip().lstrip('#')
+    if len(c) == 3:
+        c = ''.join(ch * 2 for ch in c)
+    if len(c) < 6:
+        return ''
+    try:
+        int(c[:6], 16)
+    except ValueError:
+        return ''
+    return c[:6].upper()
+
+
+def _data_labels_block(pos: str, show_val: bool, show_percent: bool,
+                       num_fmt: str = '0&quot;%&quot;',
+                       size: int = 1200, color_hex: str = '000000') -> list:
+    """Возвращает строки <c:dLbls> для серии: жирные подписи с процентом."""
+    return [
+        '          <c:dLbls>',
+        f'            <c:numFmt formatCode="{num_fmt}" sourceLinked="0"/>',
+        '            <c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>',
+        '            <c:txPr>',
+        '              <a:bodyPr wrap="square" lIns="38100" tIns="19050" rIns="38100" bIns="19050" anchor="ctr"/>',
+        '              <a:lstStyle/>',
+        '              <a:p>',
+        f'                <a:pPr><a:defRPr sz="{size}" b="1">'
+        f'<a:solidFill><a:srgbClr val="{color_hex}"/></a:solidFill>'
+        f'<a:latin typeface="Times New Roman"/></a:defRPr></a:pPr>',
+        '                <a:endParaRPr lang="ru-RU"/>',
+        '              </a:p>',
+        '            </c:txPr>',
+        f'            <c:dLblPos val="{pos}"/>',
+        '            <c:showLegendKey val="0"/>',
+        f'            <c:showVal val="{1 if show_val else 0}"/>',
+        '            <c:showCatName val="0"/>',
+        '            <c:showSerName val="0"/>',
+        f'            <c:showPercent val="{1 if show_percent else 0}"/>',
+        '            <c:showBubbleSize val="0"/>',
+        '          </c:dLbls>',
+    ]
+
+
+def _values_to_percent_per_series(series_values):
+    """Конвертирует [[counts...], ...] → [[pct...], ...] по сумме своей серии (как на экране)."""
+    out = []
+    for vals in series_values:
+        total = sum(vals)
+        if total > 0:
+            out.append([round(v / total * 100, 2) for v in vals])
+        else:
+            out.append([0 for _ in vals])
+    return out
+
+
 def _build_xlsx(answers: list, series_labels: list, series_values: list) -> bytes:
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -49,9 +107,15 @@ def _build_xlsx(answers: list, series_labels: list, series_values: list) -> byte
 # ── chart XML builders ───────────────────────────────────────────────────────
 
 def _bar_xml(answers, series_labels, series_values,
-             bar_dir='col', stacked=False, show_legend=True) -> bytes:
+             bar_dir='col', stacked=False, show_legend=True,
+             series_colors=None, point_colors=None) -> bytes:
+    """
+    series_colors: список hex-цветов по сериям (multi-file) — раскрашивает каждую серию своим цветом.
+    point_colors:  список hex-цветов по точкам (single-file) — раскрашивает каждый столбик своим цветом.
+    stacked: True → percentStacked (все столбцы 100%, как в drawStackedChart).
+    """
     n = len(answers)
-    grouping = 'stacked' if stacked else 'clustered'
+    grouping = 'percentStacked' if stacked else 'clustered'
     cat_pos, val_pos = ('l', 'b') if bar_dir == 'bar' else ('b', 'l')
 
     out = [
@@ -71,6 +135,7 @@ def _bar_xml(answers, series_labels, series_values,
 
     for si, (lbl, vals) in enumerate(zip(series_labels, series_values)):
         col = chr(ord('B') + si)
+        # Заголовок серии
         out += [
             f'        <c:ser>',
             f'          <c:idx val="{si}"/><c:order val="{si}"/>',
@@ -78,6 +143,40 @@ def _bar_xml(answers, series_labels, series_values,
             f'            <c:strCache><c:ptCount val="1"/>',
             f'              <c:pt idx="0"><c:v>{_x(lbl)}</c:v></c:pt>',
             f'            </c:strCache></c:strRef></c:tx>',
+        ]
+        # Цвет всей серии (OOXML требует spPr именно после tx)
+        series_hex = ''
+        if series_colors and si < len(series_colors):
+            series_hex = _color_hex(series_colors[si])
+        if series_hex:
+            out.append(
+                f'          <c:spPr><a:solidFill><a:srgbClr val="{series_hex}"/></a:solidFill>'
+                f'<a:ln><a:noFill/></a:ln></c:spPr>'
+            )
+        out.append('          <c:invertIfNegative val="0"/>')
+        # Цвета точек (single-file, одна серия, разноцветные столбики)
+        if point_colors and not stacked:
+            for pi, pc in enumerate(point_colors):
+                phex = _color_hex(pc)
+                if not phex:
+                    continue
+                out += [
+                    f'          <c:dPt>',
+                    f'            <c:idx val="{pi}"/>',
+                    f'            <c:invertIfNegative val="0"/>',
+                    f'            <c:bubble3D val="0"/>',
+                    f'            <c:spPr><a:solidFill><a:srgbClr val="{phex}"/></a:solidFill>'
+                    f'<a:ln><a:noFill/></a:ln></c:spPr>',
+                    f'          </c:dPt>',
+                ]
+        # Подписи: жирный чёрный процент. Stacked → по центру сегмента, иначе → outEnd.
+        out += _data_labels_block(
+            pos='ctr' if stacked else 'outEnd',
+            show_val=True,
+            show_percent=False,
+        )
+        # Категории
+        out += [
             f'          <c:cat><c:strRef>',
             f'            <c:f>Sheet1!$A$2:$A${n+1}</c:f>',
             f'            <c:strCache><c:ptCount val="{n}"/>',
@@ -98,6 +197,15 @@ def _bar_xml(answers, series_labels, series_values,
             f'        </c:ser>',
         ]
 
+    # Ширина зазора между столбиками; для накопленной — плотная (overlap=100)
+    if stacked:
+        out += [
+            '        <c:gapWidth val="60"/>',
+            '        <c:overlap val="100"/>',
+        ]
+    else:
+        out.append('        <c:gapWidth val="80"/>')
+
     out += [
         '        <c:axId val="100"/><c:axId val="101"/>',
         '      </c:barChart>',
@@ -106,19 +214,39 @@ def _bar_xml(answers, series_labels, series_values,
         '        <c:scaling><c:orientation val="minMax"/></c:scaling>',
         '        <c:delete val="0"/>',
         f'        <c:axPos val="{cat_pos}"/>',
+        '        <c:majorTickMark val="none"/>',
+        '        <c:minorTickMark val="none"/>',
         '        <c:crossAx val="101"/>',
         '      </c:catAx>',
         '      <c:valAx>',
         '        <c:axId val="101"/>',
         '        <c:scaling><c:orientation val="minMax"/></c:scaling>',
-        '        <c:delete val="0"/>',
+        '        <c:delete val="1"/>',
         f'        <c:axPos val="{val_pos}"/>',
         '        <c:crossAx val="100"/>',
         '      </c:valAx>',
         '    </c:plotArea>',
     ]
-    if show_legend:
-        out.append('    <c:legend><c:legendPos val="b"/></c:legend>')
+    # Когда single-file и каждый столбик свой цвет (через dPt),
+    # Word плодит легенду по каждой точке — это дублирует подписи на оси.
+    # В таком случае легенду не показываем вообще (она бессмысленна).
+    effective_show_legend = show_legend and not (point_colors and not stacked)
+    if effective_show_legend:
+        # overlay=0 гарантирует, что легенда не наезжает на область диаграммы,
+        # а layout с y=0.88 жёстко прижимает её к низу.
+        out += [
+            '    <c:legend>',
+            '      <c:legendPos val="b"/>',
+            '      <c:layout>',
+            '        <c:manualLayout>',
+            '          <c:xMode val="edge"/><c:yMode val="edge"/>',
+            '          <c:x val="0"/><c:y val="0.88"/>',
+            '          <c:w val="1"/><c:h val="0.12"/>',
+            '        </c:manualLayout>',
+            '      </c:layout>',
+            '      <c:overlay val="0"/>',
+            '    </c:legend>',
+        ]
     out += [
         '    <c:plotVisOnly val="1"/>',
         '  </c:chart>',
@@ -128,7 +256,11 @@ def _bar_xml(answers, series_labels, series_values,
     return '\n'.join(out).encode('utf-8')
 
 
-def _pie_xml(answers, values, series_label, show_legend=True) -> bytes:
+def _pie_xml(answers, values, series_label, show_legend=True,
+             point_colors=None) -> bytes:
+    """
+    point_colors: список hex-цветов для каждого сектора (как на экране в drawPieChart).
+    """
     n = len(answers)
     out = [
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
@@ -147,6 +279,29 @@ def _pie_xml(answers, values, series_label, show_legend=True) -> bytes:
         '            <c:strCache><c:ptCount val="1"/>',
         f'              <c:pt idx="0"><c:v>{_x(series_label)}</c:v></c:pt>',
         '            </c:strCache></c:strRef></c:tx>',
+    ]
+    # Цвета секторов (OOXML: dPt идёт между tx/spPr и cat)
+    if point_colors:
+        for pi, pc in enumerate(point_colors):
+            phex = _color_hex(pc)
+            if not phex:
+                continue
+            out += [
+                f'          <c:dPt>',
+                f'            <c:idx val="{pi}"/>',
+                f'            <c:bubble3D val="0"/>',
+                f'            <c:spPr><a:solidFill><a:srgbClr val="{phex}"/></a:solidFill>'
+                f'<a:ln w="9525"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:ln></c:spPr>',
+                f'          </c:dPt>',
+            ]
+    # Подписи: жирный чёрный процент. Для пирога OOXML сам вычислит % из сумм.
+    out += _data_labels_block(
+        pos='outEnd',
+        show_val=False,
+        show_percent=True,
+        num_fmt='0%',
+    )
+    out += [
         '          <c:cat><c:strRef>',
         f'            <c:f>Sheet1!$A$2:$A${n+1}</c:f>',
         f'            <c:strCache><c:ptCount val="{n}"/>',
@@ -169,7 +324,19 @@ def _pie_xml(answers, values, series_label, show_legend=True) -> bytes:
         '    </c:plotArea>',
     ]
     if show_legend:
-        out.append('    <c:legend><c:legendPos val="r"/></c:legend>')
+        out += [
+            '    <c:legend>',
+            '      <c:legendPos val="b"/>',
+            '      <c:layout>',
+            '        <c:manualLayout>',
+            '          <c:xMode val="edge"/><c:yMode val="edge"/>',
+            '          <c:x val="0"/><c:y val="0.85"/>',
+            '          <c:w val="1"/><c:h val="0.15"/>',
+            '        </c:manualLayout>',
+            '      </c:layout>',
+            '      <c:overlay val="0"/>',
+            '    </c:legend>',
+        ]
     out += [
         '    <c:plotVisOnly val="1"/>',
         '  </c:chart>',
@@ -214,11 +381,25 @@ def _embed_chart(doc, chart_xml: bytes, xlsx: bytes, n: int, cx=TEXT_W, cy=BAR_H
 
 # ── public API ────────────────────────────────────────────────────────────────
 
-def insert_visualization(doc, q: dict, chart_counter: list):
+def insert_visualization(doc, q: dict, chart_counter: list,
+                         table_counter: list = None, part_counter: list = None):
     """
     Insert the appropriate visualization (table or chart) after AI text.
-    chart_counter is a single-element list [n] used as a mutable integer.
+    chart_counter — номер «Рисунок N» (один на вопрос).
+    table_counter — номер «Таблица N» (один на таблицу).
+    part_counter  — порядковый номер файла chart{N}.xml/sheet{N}.xlsx внутри docx
+                    (всегда уникальный, иначе ZIP схватит дубликаты).
     """
+    if table_counter is None:
+        table_counter = [1]
+    if part_counter is None:
+        part_counter = [1]
+
+    def _next_part():
+        p = part_counter[0]
+        part_counter[0] += 1
+        return p
+
     viz_tab = q.get('viz_tab')
     if not viz_tab:
         return
@@ -227,32 +408,133 @@ def insert_visualization(doc, q: dict, chart_counter: list):
     file_labels = q['file_labels']
     rows_data = q['rows']
     show_legend = q.get('show_legend', True)
+    question_name = q.get('question_name', '')
 
     answers = [r['answer'] for r in rows_data]
 
+    # На экране chartDirection='x' = вертикальные столбцы, 'y' = горизонтальные.
+    # В OOXML: barDir='col' = вертикальные, 'bar' = горизонтальные.
+    bar_dir = 'col' if q.get('chart_direction', 'y') == 'x' else 'bar'
+
+    is_single_file = len(file_keys) == 1
+    pie_colors = q.get('pie_colors') or []
+    bar_colors = q.get('bar_colors') or []
+    file_colors_map = q.get('file_colors') or {}
+    series_colors = [file_colors_map.get(fk, '') for fk in file_keys]
+    point_colors_bar = bar_colors if is_single_file else None
+
+    from docx.shared import Pt
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    def _add_caption(text, above=False, center=True):
+        para = doc.add_paragraph()
+        para.paragraph_format.space_before = Pt(2 if above else 4)
+        para.paragraph_format.space_after = Pt(4 if above else 8)
+        if center:
+            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = para.add_run(text)
+        run.italic = True
+        run.font.name = "Times New Roman"
+        run.font.size = Pt(11)
+        return para
+
+    # Один номер «Рисунок N» на весь вопрос: резервируется лениво при первой
+    # вставке диаграммы и переиспользуется для всех последующих.
+    fig_state = {'n': None}
+
+    def _fig_num():
+        if fig_state['n'] is None:
+            fig_state['n'] = chart_counter[0]
+            chart_counter[0] += 1
+        return fig_state['n']
+
     if viz_tab == 'table':
+        # Подпись НАД таблицей
+        t_num = table_counter[0]
+        table_counter[0] += 1
+        _add_caption(
+            f'Таблица {t_num} – Распределение ответов респондентов на вопрос: «{question_name}»',
+            above=True
+        )
         _insert_word_table(doc, q)
+
+    elif viz_tab == 'both':
+        # Подпись над таблицей
+        t_num = table_counter[0]
+        table_counter[0] += 1
+        _add_caption(
+            f'Таблица {t_num} – Распределение ответов респондентов на вопрос: «{question_name}»',
+            above=True
+        )
+        _insert_word_table(doc, q)
+
+        # Диаграмма того типа, что был выбран на фронте
+        chart_type = q.get('both_chart_type', 'bar')
+        series_labels = [file_labels.get(fk, fk) for fk in file_keys]
+        series_counts = [[r['counts'].get(fk, 0) for r in rows_data] for fk in file_keys]
+        series_values_pct = _values_to_percent_per_series(series_counts)
+
+        if chart_type == 'pie':
+            n = _fig_num()
+            for fk in file_keys:
+                values = [r['counts'].get(fk, 0) for r in rows_data]
+                lbl = file_labels.get(fk, fk)
+                chart_xml = _pie_xml(answers, values, lbl, show_legend,
+                                     point_colors=pie_colors)
+                xlsx = _build_xlsx(answers, [lbl], [values])
+                _embed_chart(doc, chart_xml, xlsx, _next_part(), cy=PIE_H)
+            _add_caption(
+                f'Рисунок {n} – Распределение ответов респондентов на вопрос: «{question_name}»',
+                above=False
+            )
+        else:
+            stacked = (chart_type == 'stacked')
+            chart_xml = _bar_xml(
+                answers, series_labels, series_values_pct,
+                bar_dir, stacked, show_legend,
+                series_colors=series_colors,
+                point_colors=point_colors_bar,
+            )
+            xlsx = _build_xlsx(answers, series_labels, series_values_pct)
+            n = _fig_num()
+            _embed_chart(doc, chart_xml, xlsx, _next_part())
+            _add_caption(
+                f'Рисунок {n} – Распределение ответов респондентов на вопрос: «{question_name}»',
+                above=False
+            )
 
     elif viz_tab in ('bar', 'stacked'):
         series_labels = [file_labels.get(fk, fk) for fk in file_keys]
-        series_values = [[r['counts'].get(fk, 0) for r in rows_data] for fk in file_keys]
-        bar_dir = 'bar' if q.get('chart_direction', 'y') == 'x' else 'col'
+        series_counts = [[r['counts'].get(fk, 0) for r in rows_data] for fk in file_keys]
+        series_values_pct = _values_to_percent_per_series(series_counts)
         stacked = (viz_tab == 'stacked')
-        chart_xml = _bar_xml(answers, series_labels, series_values, bar_dir, stacked, show_legend)
-        xlsx = _build_xlsx(answers, series_labels, series_values)
-        n = chart_counter[0]
-        chart_counter[0] += 1
-        _embed_chart(doc, chart_xml, xlsx, n)
+        chart_xml = _bar_xml(
+            answers, series_labels, series_values_pct,
+            bar_dir, stacked, show_legend,
+            series_colors=series_colors,
+            point_colors=point_colors_bar,
+        )
+        xlsx = _build_xlsx(answers, series_labels, series_values_pct)
+        n = _fig_num()
+        _embed_chart(doc, chart_xml, xlsx, _next_part())
+        _add_caption(
+            f'Рисунок {n} – Распределение ответов респондентов на вопрос: «{question_name}»',
+            above=False
+        )
 
     elif viz_tab == 'pie':
+        n = _fig_num()
         for fk in file_keys:
             values = [r['counts'].get(fk, 0) for r in rows_data]
             lbl = file_labels.get(fk, fk)
-            chart_xml = _pie_xml(answers, values, lbl, show_legend)
+            chart_xml = _pie_xml(answers, values, lbl, show_legend,
+                                 point_colors=pie_colors)
             xlsx = _build_xlsx(answers, [lbl], [values])
-            n = chart_counter[0]
-            chart_counter[0] += 1
-            _embed_chart(doc, chart_xml, xlsx, n, cy=PIE_H)
+            _embed_chart(doc, chart_xml, xlsx, _next_part(), cy=PIE_H)
+        _add_caption(
+            f'Рисунок {n} – Распределение ответов респондентов на вопрос: «{question_name}»',
+            above=False
+        )
 
 
 def _insert_word_table(doc, q: dict):
