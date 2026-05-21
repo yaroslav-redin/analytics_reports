@@ -61,6 +61,19 @@ function _renderSectionsList() {
     });
 }
 
+function _refreshVizAllBtn(btn, sec) {
+    if (!btn) return;
+    const total = sec.questions.length;
+    const vizCount = sec.questions.filter(q => q.visualize).length;
+    const allViz = total > 0 && vizCount === total;
+    btn.disabled = total === 0;
+    btn.classList.toggle('btn-primary', allViz);
+    btn.classList.toggle('btn-outline-primary', !allViz);
+    btn.title = total === 0
+        ? 'В разделе нет вопросов'
+        : (allViz ? 'Отключить визуализацию для всех вопросов' : 'Визуализировать все вопросы раздела');
+}
+
 function _buildSectionCard(sec) {
     const collapsed = window._collapsedSections && window._collapsedSections.has(sec.id);
     const sectionColor = sec.color || '#a0bce5';
@@ -83,6 +96,10 @@ function _buildSectionCard(sec) {
     card.querySelector('.add-qs-to-section-btn').dataset.sectionId = sec.id;
     card.querySelector('.edit-section-btn').dataset.sectionId = sec.id;
     card.querySelector('.delete-section-btn').dataset.sectionId = sec.id;
+
+    const vizAllBtn = card.querySelector('.viz-all-in-section-btn');
+    vizAllBtn.dataset.sectionId = sec.id;
+    _refreshVizAllBtn(vizAllBtn, sec);
 
     const wrapper = card.querySelector('.section-questions-wrapper');
     wrapper.dataset.sectionId = sec.id;
@@ -316,6 +333,16 @@ document.getElementById('sectionsList').addEventListener('click', e => {
         document.getElementById('deleteSectionNameLabel').textContent = `«${sec.name}»`;
         document.getElementById('confirmDeleteSectionBtn').dataset.sectionId = sec.id;
         new bootstrap.Modal(document.getElementById('confirmDeleteSectionModal')).show();
+        return;
+    }
+    const vizAllBtn = e.target.closest('.viz-all-in-section-btn');
+    if (vizAllBtn) {
+        const sec = window.reportSections.find(s => s.id === vizAllBtn.dataset.sectionId);
+        if (!sec || !sec.questions.length) return;
+        const allViz = sec.questions.every(q => q.visualize);
+        const newVal = !allViz;
+        sec.questions.forEach(q => { q.visualize = newVal; });
+        renderStep4();
         return;
     }
     const remBtn = e.target.closest('.section-q-remove-btn');

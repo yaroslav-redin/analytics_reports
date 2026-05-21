@@ -99,6 +99,7 @@
             <div class="d-flex align-items-center gap-2 mb-1">
                 <button type="button" class="section-collapse-btn"><i class="fa-solid fa-chevron-down"></i></button>
                 <span class="fw-semibold flex-grow-1 text-truncate section-card-name"></span>
+                <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 viz-all-in-section-btn" title="Визуализировать все вопросы раздела"><i class="fa-solid fa-chart-line"></i></button>
                 <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 add-qs-to-section-btn" title="Добавить выбранные вопросы"><i class="fa-solid fa-plus"></i></button>
                 <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 edit-section-btn" title="Редактировать раздел"><i class="fa-solid fa-pen"></i></button>
                 <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 delete-section-btn" title="Удалить раздел"><i class="fa-solid fa-trash-can"></i></button>
@@ -172,6 +173,7 @@
                     <li class="nav-item"><button class="nav-link viz-tab-btn" data-tab="bar" type="button"><i class="fa-solid fa-chart-column me-1"></i>Столбчатая</button></li>
                     <li class="nav-item"><button class="nav-link viz-tab-btn" data-tab="stacked" type="button"><i class="fa-solid fa-chart-bar me-1"></i>Накопленная</button></li>
                     <li class="nav-item"><button class="nav-link viz-tab-btn" data-tab="pie" type="button"><i class="fa-solid fa-chart-pie me-1"></i>Круговая</button></li>
+                    <li class="nav-item"><button class="nav-link viz-tab-btn" data-tab="both" type="button"><i class="fa-solid fa-table-columns me-1"></i>Таблица + диаграмма</button></li>
                 </ul>
                 <div class="ui-system-font chart-settings-panel p-2 mb-3 border border-top-0 border-secondary-subtle rounded-bottom d-flex flex-wrap gap-3 align-items-center shadow-sm full-item-settings">
                     <div class="form-check mb-0" data-vis-tabs="table">
@@ -197,6 +199,7 @@
                     <button type="button" class="btn btn-sm btn-outline-secondary ms-auto full-item-hide-col-btn" title="Скрыть столбцы" data-vis-tabs="table"><i class="fa-solid fa-eye-slash"></i></button>
                     <button type="button" class="btn btn-sm btn-outline-secondary full-item-edit-btn" title="Редактировать данные диаграммы" data-vis-tabs="bar stacked pie"><i class="fa-solid fa-pen"></i></button>
                     <button type="button" class="btn btn-sm btn-outline-secondary full-item-fuzzy-btn" title="Сгруппировать похожие ответы"><i class="fa-solid fa-shuffle"></i></button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary full-item-skip-analytics-btn" title="Не генерировать аналитику для этого вопроса" data-vis-tabs="table bar stacked pie both"><i class="fa-solid fa-ban"></i></button>
                 </div>
                 <div class="full-item-pane-table">
                     <div class="full-item-table-caption mb-3"></div>
@@ -220,6 +223,17 @@
                     <div class="d-flex gap-3 flex-wrap full-item-pie-canvases"></div>
                     <div class="text-center mb-4 full-item-pie-caption"></div>
                 </div>
+                <div class="full-item-pane-both d-none">
+                    <div class="full-item-both-table-caption mb-2"></div>
+                    <div class="table-responsive mb-3">
+                        <table class="table table-bordered table-hover table-custom-border align-middle mb-0 full-item-both-table">
+                            <thead></thead><tbody></tbody><tfoot></tfoot>
+                        </table>
+                    </div>
+                    <div class="full-item-both-bar-color-editor"></div>
+                    <div class="chart-container mb-2"><canvas class="full-item-both-bar-canvas"></canvas></div>
+                    <div class="text-center mb-4 full-item-both-bar-caption"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -237,6 +251,7 @@
         <div class="d-none border border-top-0 rounded-bottom p-2 simple-item-body">
             <div class="d-flex justify-content-end mb-2 ui-system-font">
                 <button type="button" class="btn btn-sm btn-outline-secondary simple-item-fuzzy-btn" title="Сгруппировать похожие ответы"><i class="fa-solid fa-shuffle"></i></button>
+                <button type="button" class="btn btn-sm btn-outline-secondary simple-item-skip-analytics-btn" title="Не генерировать аналитику для этого вопроса"><i class="fa-solid fa-ban"></i></button>
             </div>
             <div class="table-responsive">
                 <table class="table table-bordered table-hover table-custom-border align-middle mb-0 simple-item-table">
