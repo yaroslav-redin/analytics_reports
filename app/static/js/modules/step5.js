@@ -411,10 +411,52 @@ document.addEventListener('click', e => {
     const simpleFuzzyBtn = e.target.closest('.simple-item-fuzzy-btn');
     if (simpleFuzzyBtn) { confirmFuzzyMapping(simpleFuzzyBtn.dataset.id); return; }
 
+    const skipBtn = e.target.closest('.full-item-skip-analytics-btn');
+    if (skipBtn) {
+        const wrapper = skipBtn.closest('.full-item-wrapper');
+        if (!wrapper) return;
+        const collapseBtn = wrapper.querySelector('.full-item-collapse-btn');
+        const id = collapseBtn?.dataset?.id;
+        if (!id || !window.appData[id]) return;
+        const nowSkipped = !window.appData[id].options.skipAnalytics;
+        window.appData[id].options.skipAnalytics = nowSkipped;
+        skipBtn.classList.toggle('btn-outline-secondary', !nowSkipped);
+        skipBtn.classList.toggle('btn-danger', nowSkipped);
+        skipBtn.title = nowSkipped
+            ? 'Аналитика отключена — нажмите чтобы включить'
+            : 'Не генерировать аналитику для этого вопроса';
+        return;
+    }
+
+    // ── skip analytics (simple item) ──────────────────────────────────
+    const simpleSkipBtn = e.target.closest('.simple-item-skip-analytics-btn');
+    if (simpleSkipBtn) {
+        const body = simpleSkipBtn.closest('.simple-item-body');
+        if (!body) return;
+        const table = body.querySelector('table[id]');
+        const id = table?.id;
+        if (!id || !window.appData[id]) return;
+        const nowSkipped = !window.appData[id].options.skipAnalytics;
+        window.appData[id].options.skipAnalytics = nowSkipped;
+        simpleSkipBtn.classList.toggle('btn-outline-secondary', !nowSkipped);
+        simpleSkipBtn.classList.toggle('btn-danger', nowSkipped);
+        simpleSkipBtn.title = nowSkipped
+            ? 'Аналитика отключена — нажмите чтобы включить'
+            : 'Не генерировать аналитику для этого вопроса';
+        return;
+    }
+
+    // ── viz tab switch ─────────────────────────────────────────────────
     const btn = e.target.closest('.viz-tab-btn');
     if (!btn) return;
     const id = btn.dataset.id;
     const tab = btn.dataset.tab;
+
+    if (tab !== 'table' && tab !== 'both') {
+        if (window.appData[id]) {
+            window.appData[id]._lastChartTab = tab;
+        }
+    }
 
     document.querySelectorAll(`#tabs_${id} .viz-tab-btn`).forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
@@ -444,55 +486,17 @@ document.addEventListener('click', e => {
         window.renderedTabs[id].pie = true;
         setTimeout(() => drawPieChart(id), 50);
     }
-    if (tab === 'both' && !window.renderedTabs[id].both) {
-    window.renderedTabs[id].both = true;
-    const dataObj = window.appData[id];
-    if (dataObj) {
-        // Создаём временную копию appData для рендера в другую таблицу
-        const bothId = `both_table_${id}`;
-        window.appData[bothId] = JSON.parse(JSON.stringify(dataObj));
-        window.appData[bothId].question_name = dataObj.question_name;
-        setTimeout(() => {
-            renderTable(bothId);
-            // Рендерим диаграмму на канвасе both
-            const origCanvasId = dataObj._bothCanvasId || `both_canvas_${id}`;
-            drawChartOnCanvas(id, origCanvasId, `both_bar_color_editor_${id}`);
-        }, 50);
+    if (tab === 'both') {
+        window.renderedTabs[id].both = true;
+        const dataObj = window.appData[id];
+        if (dataObj) {
+            const bothTableId = `both_table_${id}`;
+            window.appData[bothTableId] = JSON.parse(JSON.stringify(dataObj));
+            const lastTab = dataObj._lastChartTab || 'bar';
+            setTimeout(() => {
+                renderTable(bothTableId);
+                drawChartForBoth(id, lastTab);
+            }, 50);
+        }
     }
-}
-const skipBtn = e.target.closest('.full-item-skip-analytics-btn');
-if (skipBtn) {
-    const id = skipBtn.closest('[id^="pane_"], .full-item-wrapper')
-        ?.querySelector('[data-id]')?.dataset?.id
-        || skipBtn.closest('.full-item-wrapper')
-            ?.querySelector('.full-item-collapse-btn')?.dataset?.id;
-    if (id && window.appData[id]) {
-        const current = window.appData[id].options.skipAnalytics;
-        window.appData[id].options.skipAnalytics = !current;
-        skipBtn.classList.toggle('active', !current);
-        skipBtn.classList.toggle('btn-outline-secondary', current);
-        skipBtn.classList.toggle('btn-danger', !current);
-        skipBtn.title = !current
-            ? 'Аналитика отключена (нажмите чтобы включить)'
-            : 'Не генерировать аналитику для этого вопроса';
-    }
-    return;
-}
-
-const simpleSkipBtn = e.target.closest('.simple-item-skip-analytics-btn');
-if (simpleSkipBtn) {
-    const id = simpleSkipBtn.closest('.simple-item-body')
-        ?.querySelector('.simple-item-table')?.id;
-    if (id && window.appData[id]) {
-        const current = window.appData[id].options.skipAnalytics;
-        window.appData[id].options.skipAnalytics = !current;
-        simpleSkipBtn.classList.toggle('active', !current);
-        simpleSkipBtn.classList.toggle('btn-outline-secondary', current);
-        simpleSkipBtn.classList.toggle('btn-danger', !current);
-        simpleSkipBtn.title = !current
-            ? 'Аналитика отключена (нажмите чтобы включить)'
-            : 'Не генерировать аналитику для этого вопроса';
-    }
-    return;
-}
 });

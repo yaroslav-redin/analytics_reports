@@ -262,7 +262,7 @@ def insert_visualization(doc, q: dict, chart_counter: list, table_counter: list 
         _insert_word_table(doc, q)
 
     elif viz_tab == 'both':
-        # Сначала таблица с подписью над ней
+    # Подпись над таблицей
         t_num = table_counter[0]
         table_counter[0] += 1
         _add_caption(
@@ -271,19 +271,36 @@ def insert_visualization(doc, q: dict, chart_counter: list, table_counter: list 
         )
         _insert_word_table(doc, q)
 
-        # Затем диаграмма с подписью под ней
+        # Диаграмма того типа, что был выбран на фронте
+        chart_type = q.get('both_chart_type', 'bar')
         series_labels = [file_labels.get(fk, fk) for fk in file_keys]
         series_values = [[r['counts'].get(fk, 0) for r in rows_data] for fk in file_keys]
         bar_dir = 'bar' if q.get('chart_direction', 'y') == 'x' else 'col'
-        chart_xml = _bar_xml(answers, series_labels, series_values, bar_dir, False, show_legend)
-        xlsx = _build_xlsx(answers, series_labels, series_values)
-        n = chart_counter[0]
-        chart_counter[0] += 1
-        _embed_chart(doc, chart_xml, xlsx, n)
-        _add_caption(
-            f'Рисунок {n} – Распределение ответов респондентов на вопрос: «{question_name}»',
-            above=False
-        )
+
+        if chart_type == 'pie':
+            for fk in file_keys:
+                values = [r['counts'].get(fk, 0) for r in rows_data]
+                lbl = file_labels.get(fk, fk)
+                chart_xml = _pie_xml(answers, values, lbl, show_legend)
+                xlsx = _build_xlsx(answers, [lbl], [values])
+                n = chart_counter[0]
+                chart_counter[0] += 1
+                _embed_chart(doc, chart_xml, xlsx, n, cy=PIE_H)
+                _add_caption(
+                    f'Рисунок {n} – Распределение ответов респондентов на вопрос: «{question_name}»',
+                    above=False
+                )
+        else:
+            stacked = (chart_type == 'stacked')
+            chart_xml = _bar_xml(answers, series_labels, series_values, bar_dir, stacked, show_legend)
+            xlsx = _build_xlsx(answers, series_labels, series_values)
+            n = chart_counter[0]
+            chart_counter[0] += 1
+            _embed_chart(doc, chart_xml, xlsx, n)
+            _add_caption(
+                f'Рисунок {n} – Распределение ответов респондентов на вопрос: «{question_name}»',
+                above=False
+            )
 
     elif viz_tab in ('bar', 'stacked'):
         series_labels = [file_labels.get(fk, fk) for fk in file_keys]

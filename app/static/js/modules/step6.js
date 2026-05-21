@@ -45,9 +45,13 @@ async function _doExport() {
 
             const opts = dataObj.options || {};
             let vizTab = null;
-            if (qEntry.visualize) {
-                const activeBtn = document.querySelector(`#tabs_${id} .viz-tab-btn.active`);
+            const tabsEl = document.getElementById(`tabs_${id}`);
+            if (tabsEl) {           
+                // Это full-item с вкладками
+                const activeBtn = tabsEl.querySelector('.viz-tab-btn.active');
                 vizTab = activeBtn ? activeBtn.dataset.tab : 'table';
+            } else if (qEntry.visualize) {
+                vizTab = 'table';
             }
 
             questions.push({
@@ -66,6 +70,7 @@ async function _doExport() {
                 show_total: opts.showTotal !== false,
                 section: { name: sec.name, description: sec.description || '', color: sec.color || '' },
                 viz_tab: vizTab,
+                both_chart_type: window.appData[id]?._lastChartTab || 'bar',  // ← ДОБАВИТЬ
                 chart_direction: opts.chartDirection || 'y',
                 show_legend: opts.showLegend !== false,
                 hidden_col: opts.hiddenCol || 'none',
@@ -90,9 +95,12 @@ async function _doExport() {
 
         const opts = dataObj.options || {};
         let vizTab = null;
-        if (dataObj.visualize) {
-            const activeBtn = document.querySelector(`#tabs_${id} .viz-tab-btn.active`);
+        const tabsEl = document.getElementById(`tabs_${id}`);
+        if (tabsEl) {
+            const activeBtn = tabsEl.querySelector('.viz-tab-btn.active');
             vizTab = activeBtn ? activeBtn.dataset.tab : 'table';
+        } else if (dataObj.visualize) {
+            vizTab = 'table';
         }
 
         questions.push({
@@ -111,6 +119,7 @@ async function _doExport() {
             show_total: opts.showTotal !== false,
             section: null,  // без раздела
             viz_tab: vizTab,
+            both_chart_type: window.appData[id]?._lastChartTab || 'bar',
             chart_direction: opts.chartDirection || 'y',
             show_legend: opts.showLegend !== false,
             hidden_col: opts.hiddenCol || 'none',
@@ -151,6 +160,7 @@ async function _doExport() {
     }, 1000);
 
     try {
+
         const response = await fetch('/export_docx_stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

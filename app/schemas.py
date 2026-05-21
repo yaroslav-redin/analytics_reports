@@ -48,6 +48,7 @@ class ExportQuestion(BaseModel):
     show_legend: bool = True
     hidden_col: str = 'none'             # 'none' | 'count' | 'percent'
     skip_analytics: bool = False
+    both_chart_type: str = 'bar'
 
 class ExportDocxRequest(BaseModel):
     questions: List[ExportQuestion]
