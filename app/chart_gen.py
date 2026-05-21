@@ -381,14 +381,24 @@ def _embed_chart(doc, chart_xml: bytes, xlsx: bytes, n: int, cx=TEXT_W, cy=BAR_H
 
 # ── public API ────────────────────────────────────────────────────────────────
 
-def insert_visualization(doc, q: dict, chart_counter: list, table_counter: list = None):
+def insert_visualization(doc, q: dict, chart_counter: list,
+                         table_counter: list = None, part_counter: list = None):
     """
     Insert the appropriate visualization (table or chart) after AI text.
-    chart_counter is a single-element list [n] used as a mutable integer for figures.
-    table_counter is a single-element list [n] for tables.
+    chart_counter — номер «Рисунок N» (один на вопрос).
+    table_counter — номер «Таблица N» (один на таблицу).
+    part_counter  — порядковый номер файла chart{N}.xml/sheet{N}.xlsx внутри docx
+                    (всегда уникальный, иначе ZIP схватит дубликаты).
     """
     if table_counter is None:
         table_counter = [1]
+    if part_counter is None:
+        part_counter = [1]
+
+    def _next_part():
+        p = part_counter[0]
+        part_counter[0] += 1
+        return p
 
     viz_tab = q.get('viz_tab')
     if not viz_tab:
@@ -428,6 +438,16 @@ def insert_visualization(doc, q: dict, chart_counter: list, table_counter: list 
         run.font.size = Pt(11)
         return para
 
+    # Один номер «Рисунок N» на весь вопрос: резервируется лениво при первой
+    # вставке диаграммы и переиспользуется для всех последующих.
+    fig_state = {'n': None}
+
+    def _fig_num():
+        if fig_state['n'] is None:
+            fig_state['n'] = chart_counter[0]
+            chart_counter[0] += 1
+        return fig_state['n']
+
     if viz_tab == 'table':
         # Подпись НАД таблицей
         t_num = table_counter[0]
@@ -455,19 +475,18 @@ def insert_visualization(doc, q: dict, chart_counter: list, table_counter: list 
         series_values_pct = _values_to_percent_per_series(series_counts)
 
         if chart_type == 'pie':
+            n = _fig_num()
             for fk in file_keys:
                 values = [r['counts'].get(fk, 0) for r in rows_data]
                 lbl = file_labels.get(fk, fk)
                 chart_xml = _pie_xml(answers, values, lbl, show_legend,
                                      point_colors=pie_colors)
                 xlsx = _build_xlsx(answers, [lbl], [values])
-                n = chart_counter[0]
-                chart_counter[0] += 1
-                _embed_chart(doc, chart_xml, xlsx, n, cy=PIE_H)
-                _add_caption(
-                    f'Рисунок {n} – Распределение ответов респондентов на вопрос: «{question_name}»',
-                    above=False
-                )
+                _embed_chart(doc, chart_xml, xlsx, _next_part(), cy=PIE_H)
+            _add_caption(
+                f'Рисунок {n} – Распределение ответов респондентов на вопрос: «{question_name}»',
+                above=False
+            )
         else:
             stacked = (chart_type == 'stacked')
             chart_xml = _bar_xml(
@@ -477,9 +496,8 @@ def insert_visualization(doc, q: dict, chart_counter: list, table_counter: list 
                 point_colors=point_colors_bar,
             )
             xlsx = _build_xlsx(answers, series_labels, series_values_pct)
-            n = chart_counter[0]
-            chart_counter[0] += 1
-            _embed_chart(doc, chart_xml, xlsx, n)
+            n = _fig_num()
+            _embed_chart(doc, chart_xml, xlsx, _next_part())
             _add_caption(
                 f'Рисунок {n} – Распределение ответов респондентов на вопрос: «{question_name}»',
                 above=False
@@ -497,28 +515,26 @@ def insert_visualization(doc, q: dict, chart_counter: list, table_counter: list 
             point_colors=point_colors_bar,
         )
         xlsx = _build_xlsx(answers, series_labels, series_values_pct)
-        n = chart_counter[0]
-        chart_counter[0] += 1
-        _embed_chart(doc, chart_xml, xlsx, n)
+        n = _fig_num()
+        _embed_chart(doc, chart_xml, xlsx, _next_part())
         _add_caption(
             f'Рисунок {n} – Распределение ответов респондентов на вопрос: «{question_name}»',
             above=False
         )
 
     elif viz_tab == 'pie':
+        n = _fig_num()
         for fk in file_keys:
             values = [r['counts'].get(fk, 0) for r in rows_data]
             lbl = file_labels.get(fk, fk)
             chart_xml = _pie_xml(answers, values, lbl, show_legend,
                                  point_colors=pie_colors)
             xlsx = _build_xlsx(answers, [lbl], [values])
-            n = chart_counter[0]
-            chart_counter[0] += 1
-            _embed_chart(doc, chart_xml, xlsx, n, cy=PIE_H)
-            _add_caption(
-                f'Рисунок {n} – Распределение ответов респондентов на вопрос: «{question_name}»',
-                above=False
-            )
+            _embed_chart(doc, chart_xml, xlsx, _next_part(), cy=PIE_H)
+        _add_caption(
+            f'Рисунок {n} – Распределение ответов респондентов на вопрос: «{question_name}»',
+            above=False
+        )
 
 
 def _insert_word_table(doc, q: dict):

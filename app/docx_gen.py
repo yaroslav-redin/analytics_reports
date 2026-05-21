@@ -116,9 +116,6 @@ def generate_data_docx(questions: list) -> bytes:
         file_totals = q["file_totals"]
         is_single = len(file_keys) == 1
 
-        _p(doc, f"Вопрос {q['table_num']} – «{q['question_name']}»",
-           bold=True, space_before=10, space_after=2)
-
         for row in q["rows"]:
             if is_single:
                 fk = file_keys[0]
@@ -271,7 +268,8 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
     total_questions = len(questions)
     _last_section = None
     chart_counter = [1]
-    table_counter = [1] 
+    table_counter = [1]
+    part_counter = [1]
 
     for idx, q in enumerate(questions, start=1):
         if cancel_event and cancel_event.is_set():
@@ -294,15 +292,6 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
             if sec_description:
                 _p(doc, sec_description, size=11, space_after=6)
 
-        _p(
-            doc,
-            f"Вопрос {q['table_num']} — «{q['question_name']}»",
-            bold=True,
-            size=12,
-            space_before=8,
-            space_after=3,
-        )
-
         if not q.get('skip_analytics', False):
             try:
                 system_prompt, user_prompt = _build_question_prompt(q, sec_name, sec_description)
@@ -316,7 +305,7 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
         else:
             print("  -> Аналитика пропущена (skip_analytics=True)")
 
-        insert_visualization(doc, q, chart_counter, table_counter)
+        insert_visualization(doc, q, chart_counter, table_counter, part_counter)
 
     buf = io.BytesIO()
     doc.save(buf)

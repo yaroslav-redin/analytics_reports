@@ -115,9 +115,8 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
             window.pieChartsData = {};
             window.renderedTabs = {};
             window._collapsedReportSections = new Set();
+            window._renderedItems = [];
 
-            let tableCounter = 1;
-            let figureCounter = 1;
             let globalItemIdx = 0;
 
             const renderItemFull = (item, container) => {
@@ -139,11 +138,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                     pieColors: [...PIE_COLORS],
                     barColors: [...PIE_COLORS]
                 };
-                const tNum = tableCounter++;
-                const fNumBar = figureCounter++;
-                const fNumStacked = figureCounter++;
-                const fNumPie = figureCounter;
-                figureCounter += item.file_keys.length;
+                window._renderedItems.push({ id, name: item.col_name });
 
                 const el = _tpl('tpl-full-result-item');
 
@@ -185,20 +180,14 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                 settings.querySelector('.full-item-fuzzy-btn').dataset.id = id;
 
                 el.querySelector('.full-item-pane-table').id = `pane_table_${id}`;
-                el.querySelector('.full-item-table-caption').textContent =
-                    `Таблица ${tNum} – Распределение ответов респондентов на вопрос: «${item.col_name}»`;
                 el.querySelector('.full-item-table').id = id;
 
                 el.querySelector('.full-item-pane-bar').id = `pane_bar_${id}`;
                 el.querySelector('.full-item-bar-color-editor').id = `bar_color_editor_${id}`;
                 el.querySelector('.full-item-bar-canvas').id = `canvas_${id}`;
-                el.querySelector('.full-item-bar-caption').textContent =
-                    `Рисунок ${fNumBar} – Распределение ответов респондентов на вопрос: «${item.col_name}»`;
 
                 el.querySelector('.full-item-pane-stacked').id = `pane_stacked_${id}`;
                 el.querySelector('.full-item-stacked-canvas').id = `stacked_canvas_${id}`;
-                el.querySelector('.full-item-stacked-caption').textContent =
-                    `Рисунок ${fNumStacked} – Распределение ответов респондентов на вопрос: «${item.col_name}»`;
 
                 el.querySelector('.full-item-pane-pie').id = `pane_pie_${id}`;
                 el.querySelector('.full-item-pie-color-editor').id = `pie_color_editor_${id}`;
@@ -212,18 +201,11 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                     pieCanvases.appendChild(pc);
                 });
 
-                el.querySelector('.full-item-pie-caption').textContent =
-                    `Рисунок ${fNumPie} – Распределение ответов респондентов на вопрос: «${item.col_name}»`;
-                //А оно не дублируется?    
                 el.querySelector('.full-item-pane-both').id = `pane_both_${id}`;
-                el.querySelector('.full-item-both-table-caption').textContent =
-                    `Таблица ${tNum} – Распределение ответов респондентов на вопрос: «${item.col_name}»`;
                 const bothTable = el.querySelector('.full-item-both-table');
                 bothTable.id = `both_table_${id}`;
                 el.querySelector('.full-item-both-bar-color-editor').id = `both_bar_color_editor_${id}`;
                 el.querySelector('.full-item-both-bar-canvas').id = `both_canvas_${id}`;
-                el.querySelector('.full-item-both-bar-caption').textContent =
-                    `Рисунок ${fNumBar} – Распределение ответов респондентов на вопрос: «${item.col_name}»`;
                 
                 settings.querySelectorAll('[data-vis-tabs]').forEach(settEl => {
                     settEl.classList.toggle('d-none', !settEl.dataset.visTabs.split(' ').includes('table'));
@@ -332,6 +314,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                 unassignedItems.forEach(item => renderItemSimple(item, unassignedBody));
             }
 
+            _recomputeCaptions();
             updateStep6Btn();
         } else { showToast(data.message, 'danger'); }
     } catch (err) { showToast('Ошибка соединения с сервером', 'danger'); }
@@ -340,6 +323,47 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
         document.getElementById('analyzeSpinner').classList.add('d-none');
     }
 });
+
+// Подписи «Таблица N» и «Рисунок N» зависят от активной вкладки каждого вопроса.
+// Для каждого full-item выбираем активный таб: 'table' → только tNum, 'both' → tNum+fNum,
+// 'bar'/'stacked'/'pie' → только fNum. Простые вопросы пропускаем (они не нумеруются).
+function _recomputeCaptions() {
+    let tNum = 1;
+    let fNum = 1;
+    (window._renderedItems || []).forEach(({ id, name }) => {
+        const tabsEl = document.getElementById(`tabs_${id}`);
+        if (!tabsEl) return;
+        const activeBtn = tabsEl.querySelector('.viz-tab-btn.active');
+        const activeTab = activeBtn ? activeBtn.dataset.tab : 'table';
+        const wrapper = tabsEl.closest('.full-item-wrapper');
+        if (!wrapper) return;
+
+        let myT = null, myF = null;
+        if (activeTab === 'table') {
+            myT = tNum++;
+        } else if (activeTab === 'both') {
+            myT = tNum++;
+            myF = fNum++;
+        } else {
+            myF = fNum++;
+        }
+
+        const tableCap = myT ? `Таблица ${myT} – Распределение ответов респондентов на вопрос: «${name}»` : '';
+        const figCap   = myF ? `Рисунок ${myF} – Распределение ответов респондентов на вопрос: «${name}»` : '';
+
+        const _set = (sel, txt) => {
+            const el = wrapper.querySelector(sel);
+            if (el) el.textContent = txt;
+        };
+        _set('.full-item-table-caption', tableCap);
+        _set('.full-item-bar-caption', figCap);
+        _set('.full-item-stacked-caption', figCap);
+        _set('.full-item-pie-caption', figCap);
+        _set('.full-item-both-table-caption', tableCap);
+        _set('.full-item-both-bar-caption', figCap);
+    });
+}
+window._recomputeCaptions = _recomputeCaptions;
 
 // ===================== VIZ INTERACTION HANDLERS =====================
 document.addEventListener('click', e => {
@@ -499,4 +523,6 @@ document.addEventListener('click', e => {
             }, 50);
         }
     }
+
+    if (window._recomputeCaptions) window._recomputeCaptions();
 });
