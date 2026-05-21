@@ -7,6 +7,7 @@ import threading
 from openai import OpenAI
 from docx import Document
 from docx.shared import Pt, Cm
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 from app.chart_gen import insert_visualization
 from app import config as cfg
 
@@ -84,10 +85,15 @@ def _backoff_wait(attempt: int):
 
 # ===================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====================
 
-def _p(doc, text, bold=False, size=12, space_before=0, space_after=3):
+def _p(doc, text, bold=False, size=14, space_before=0, space_after=0,
+       center=False, first_line_indent=True):
     para = doc.add_paragraph()
     para.paragraph_format.space_before = Pt(space_before)
     para.paragraph_format.space_after = Pt(space_after)
+    para.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
+    para.alignment = WD_ALIGN_PARAGRAPH.CENTER if center else WD_ALIGN_PARAGRAPH.JUSTIFY
+    if first_line_indent:
+        para.paragraph_format.first_line_indent = Cm(1.25)
     run = para.add_run(text)
     run.bold = bold
     run.font.name = "Times New Roman"
@@ -103,7 +109,7 @@ def _make_doc():
         section.left_margin = Cm(3)
         section.right_margin = Cm(1.5)
     doc.styles["Normal"].font.name = "Times New Roman"
-    doc.styles["Normal"].font.size = Pt(12)
+    doc.styles["Normal"].font.size = Pt(14)
     return doc
 
 
@@ -119,12 +125,15 @@ def generate_data_docx(questions: list) -> bytes:
         sec_name = sec.get("name") if sec else None
 
         if sec_name and sec_name != _last_section:
+            is_first_section = (_last_section is None)
             _last_section = sec_name
-            if doc.paragraphs:
+            if not is_first_section:
                 doc.add_page_break()
-            _p(doc, sec_name, bold=True, size=14, space_after=4)
+            _p(doc, sec_name, bold=True, size=14,
+               space_before=(0 if is_first_section else 14),
+               space_after=14, center=True, first_line_indent=False)
             if sec.get("description"):
-                _p(doc, sec["description"], size=12, space_after=8)
+                _p(doc, sec["description"], size=14, space_after=6)
 
         file_keys = q["file_keys"]
         file_labels = q["file_labels"]
@@ -385,17 +394,21 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
         sec_description = sec.get("description", "") if sec else ""
 
         if sec_name and sec_name != _last_section:
+            is_first_section = (_last_section is None)
             _last_section = sec_name
-            if idx > 1:
+            if not is_first_section:
                 doc.add_page_break()
-            _p(doc, sec_name, bold=True, size=14, space_after=4)
+            _p(doc, sec_name, bold=True, size=14,
+               space_before=(0 if is_first_section else 14),
+               space_after=14, center=True, first_line_indent=False)
             if sec_description:
-                _p(doc, sec_description, size=11, space_after=6)
+                _p(doc, sec_description, size=14, space_after=6)
 
         result = texts[idx - 1] or {}
         if not result.get("skipped") and result.get("text"):
             bold = bool(result.get("error"))
-            _p(doc, result["text"], bold=bold, space_after=6)
+            for para_text in [p.strip() for p in result["text"].split("\n\n") if p.strip()]:
+                _p(doc, para_text, bold=bold, size=14, space_after=6)
 
         insert_visualization(doc, q, chart_counter, table_counter, part_counter)
 

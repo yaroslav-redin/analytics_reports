@@ -12,7 +12,7 @@ from docx.opc.packuri import PackURI
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 
 RT_CHART   = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart'
 RT_PACKAGE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/package'
@@ -424,18 +424,18 @@ def insert_visualization(doc, q: dict, chart_counter: list,
     point_colors_bar = bar_colors if is_single_file else None
 
     from docx.shared import Pt
-    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 
     def _add_caption(text, above=False, center=True):
         para = doc.add_paragraph()
         para.paragraph_format.space_before = Pt(2 if above else 4)
-        para.paragraph_format.space_after = Pt(4 if above else 8)
+        para.paragraph_format.space_after = Pt(14)
+        para.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
         if center:
             para.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = para.add_run(text)
-        run.italic = True
         run.font.name = "Times New Roman"
-        run.font.size = Pt(11)
+        run.font.size = Pt(12)
         return para
 
     # Один номер «Рисунок N» на весь вопрос: резервируется лениво при первой
@@ -585,7 +585,7 @@ def _insert_word_table(doc, q: dict):
         run = para.add_run(str(text))
         run.bold = bold
         run.font.name = 'Times New Roman'
-        run.font.size = Pt(11)
+        run.font.size = Pt(14)
         if center:
             para.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
