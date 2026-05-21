@@ -15,7 +15,7 @@ cp .env.example .env           # заполнить секреты
 uvicorn app.main:app --reload --port 64548
 ```
 
-Тестов нет. `test_mistral.py` — устаревший скрипт проверки, использует пакет, которого нет в `requirements.txt`.
+Тестов нет.
 
 ## Переменные окружения (`.env`)
 

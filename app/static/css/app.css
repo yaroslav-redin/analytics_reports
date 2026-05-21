@@ -268,6 +268,39 @@ th:hover .row-toggle-container, th.col-excluded .row-toggle-container { opacity:
 .q-item-container:hover { background-color: #f1f3f5 !important; }
 
 .nav-fwd-btn { min-width: 200px; }
+
+@keyframes viz-warn-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.viz-warn-tip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    color: #664d03;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    white-space: normal;
+    width: 180px;
+    text-align: center;
+    line-height: 1.35;
+    z-index: 1050;
+    pointer-events: none;
+    animation: viz-warn-in 0.18s ease-out both;
+}
+.viz-warn-tip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: #ffc107;
+}
 #navBackBtn   { min-width: 120px; }
 
 #chartEditModal { pointer-events: none !important; background: transparent !important; }
@@ -557,5 +590,19 @@ th:hover .row-toggle-container, th.col-excluded .row-toggle-container { opacity:
     .navbar-brand { font-size: 0.85rem; }
     .wizard-nav-bar { height: 56px; }
 }
+
+/* ===================== SETTINGS PAGE ===================== */
+.settings-section { max-width: 860px; }
+.settings-label { font-weight: 500; margin-bottom: 0.25rem; }
+.settings-hint { font-size: 0.8rem; color: var(--bs-secondary-color); margin-top: 0.2rem; }
+.settings-card { border: 1px solid var(--bs-border-color) !important; }
+
+.color-swatch-wrap { position: relative; display: inline-flex; flex-direction: column; align-items: center; gap: 2px; }
+.color-swatch-wrap input[type=color] { width: 36px; height: 32px; padding: 1px 2px; border-radius: 4px; cursor: pointer; }
+.color-swatch-wrap .del-color { font-size: 0.65rem; color: #dc3545; cursor: pointer; background: none; border: none; padding: 0; line-height: 1; }
+.color-swatch-wrap .del-color:hover { text-decoration: underline; }
+
+#settingsTabs .nav-link { color: var(--bs-body-color); }
+#settingsTabs .nav-link.active { background-color: var(--bs-primary); color: #fff; }
 
 /* Dark theme: те же правки для тёмной темы не нужны — все переменные наследуются */

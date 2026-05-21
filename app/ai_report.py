@@ -1,13 +1,8 @@
-import os
 import json
 import re
 import time
 from openai import OpenAI
-from dotenv import load_dotenv
-
-load_dotenv()
-
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
+from app import config as cfg
 
 
 def _extract_json(text: str) -> dict:
@@ -21,27 +16,10 @@ def _extract_json(text: str) -> dict:
     raise ValueError("ИИ вернул ответ не в формате JSON")
 
 
-def _build_group_prompt(answers: list[str], question_name: str) -> str:
+def _build_group_prompt(answers: list, question_name: str) -> str:
     numbered = "\n".join(f"{i + 1}. {a}" for i, a in enumerate(answers))
-    return (
-        "Ты — эксперт по нормализации текстовых данных.\n"
-        f"Вопрос анкеты: «{question_name}»\n\n"
-        "Для каждого ответа из списка выполни нормализацию:\n"
-        "1. Переведи на русский язык (если ответ на другом языке).\n"
-        "2. Исправь явные опечатки в словах (например: «Туркмееистан» → «Туркменистан»).\n"
-        "3. Приведи к именительному падежу (например: «России» → «Россия», «Из Индии» → «Индия»).\n"
-        "4. Убери предлоги в начале («Из Туркменистана» → «Туркменистан»).\n"
-        "5. Нормализуй аббревиатуры («РФ» → «Россия», «КНР» → «Китай»).\n"
-        "6. Если ответ явно не относится к теме вопроса (имя человека, случайное слово, число) — "
-        "оставь его в точности как есть.\n"
-        "ВАЖНО: нормализуй каждый ответ строго по его смыслу. "
-        "Не смешивай разные сущности (разные страны, разные понятия).\n\n"
-        "Список ответов:\n"
-        f"{numbered}\n\n"
-        "Верни ТОЛЬКО валидный JSON без пояснений и без markdown:\n"
-        '{"1": "нормализованный ответ", "2": "нормализованный ответ", ...}\n'
-        "Ключи — номера из списка (строки), значения — нормализованные формы."
-    )
+    template = cfg.get("prompt_grouping")
+    return template.format(question_name=question_name, answers=numbered)
 
 
 def _parse_group_response(raw: str, answers: list[str]) -> list[dict]:
@@ -53,19 +31,19 @@ def _parse_group_response(raw: str, answers: list[str]) -> list[dict]:
     return [{"canonical": canon, "members": members} for canon, members in groups.items()]
 
 
-def group_answers_openrouter(answers: list[str], question_name: str) -> list[dict]:
-    key = os.getenv("OPENROUTER_API_KEY", "")
+def group_answers_openrouter(answers: list, question_name: str) -> list:
+    key = cfg.get("openrouter_api_key")
     if not key:
-        raise ValueError("OPENROUTER_API_KEY не задан в .env")
+        raise ValueError("OPENROUTER_API_KEY не задан (проверьте .env или Настройки)")
     prompt = _build_group_prompt(answers, question_name)
     client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=key)
     for attempt in range(5):
         try:
             response = client.chat.completions.create(
-                model=OPENROUTER_MODEL,
+                model=cfg.get("openrouter_model"),
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=2000,
-                temperature=0.3,
+                max_tokens=cfg.get_int("llm_max_tokens_grouping"),
+                temperature=cfg.get_float("llm_temperature"),
             )
             return _parse_group_response(response.choices[0].message.content.strip(), answers)
         except Exception as e:

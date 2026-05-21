@@ -23,6 +23,8 @@ from app.schemas import ProcessSheetsRequest, AnalyzeRequest, ExportDocxRequest,
 from app.docx_gen import generate_analysis_docx
 from app.ai_report import group_answers_openrouter
 from app.auth import router as auth_router
+from app.database import DB_PATH, init_db, log_upload_session, log_generated_report, cleanup_old_records, get_all_users
+from app import config as cfg
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -45,9 +47,12 @@ async def _session_cleanup_loop():
     while True:
         await asyncio.sleep(SESSION_MAX_AGE_HOURS * 3600)
         _clear_old_sessions()
+        await cleanup_old_records(SESSION_MAX_AGE_HOURS)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    await init_db()
+    await cfg.load(DB_PATH)
     _clear_old_sessions()
     asyncio.create_task(_session_cleanup_loop())
     yield
@@ -80,20 +85,76 @@ async def read_root(request: Request):
     user = request.session.get("user")
     if not user:
         return RedirectResponse("/login")
+    settings = cfg.all_with_defaults()
+    js_config = {
+        "pieColors": json.loads(settings["pie_colors"]),
+        "defaultFileColors": json.loads(settings["default_file_colors"]),
+    }
     return templates.TemplateResponse(
         request=request, name="index.html",
-        context={"title": "Аналитика опросов", "user": user},
+        context={"title": "Аналитика опросов", "user": user, "js_config": js_config},
     )
 
+
+@app.get("/users")
+async def users_page(request: Request):
+    user = request.session.get("user")
+    if not user:
+        return RedirectResponse("/login")
+    users = await get_all_users()
+    return templates.TemplateResponse(
+        request=request, name="users.html",
+        context={"user": user, "users": users},
+    )
+
+
+@app.get("/settings")
+async def settings_page(request: Request):
+    user = request.session.get("user")
+    if not user:
+        return RedirectResponse("/login")
+    return templates.TemplateResponse(
+        request=request, name="settings.html",
+        context={"user": user},
+    )
+
+
+@app.get("/api/settings")
+async def get_settings_api(request: Request):
+    user = request.session.get("user")
+    if not user:
+        return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
+    return cfg.all_with_defaults()
+
+
+@app.post("/api/settings")
+async def save_settings_api(request: Request):
+    user = request.session.get("user")
+    if not user:
+        return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
+    body = await request.json()
+    allowed = set(cfg.DEFAULTS.keys())
+    updates = {k: str(v) for k, v in body.items() if k in allowed}
+    await cfg.save_all(updates, DB_PATH)
+    return {"ok": True}
+
+
+@app.get("/api/settings/defaults")
+async def get_settings_defaults(request: Request):
+    user = request.session.get("user")
+    if not user:
+        return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
+    return cfg.DEFAULTS
+
 @app.post("/upload")
-async def upload_files(files: List[UploadFile] = File(...)):
+async def upload_files(request: Request, files: List[UploadFile] = File(...)):
     try:
         session_id = str(uuid.uuid4())
         session_path = _session_dir(session_id)
         os.makedirs(session_path, exist_ok=True)
 
         response_data = []
-        for file in files[:10]:
+        for file in files[:cfg.get_int("max_upload_files")]:
             contents = await file.read()
             file_ext = file.filename.split('.')[-1].lower()
             safe_filename = f"raw_{os.path.basename(file.filename)}".replace(" ", "_")
@@ -113,6 +174,13 @@ async def upload_files(files: List[UploadFile] = File(...)):
                 "filename": safe_filename,
                 "sheets": sheet_names
             })
+
+        user = request.session.get("user")
+        await log_upload_session(
+            session_id,
+            user["id"] if user else None,
+            [{"filename": f["filename"], "original_name": f["original_name"]} for f in response_data],
+        )
 
         return {"files": response_data, "session_id": session_id}
     except Exception as e:
@@ -176,9 +244,12 @@ async def ai_group_answers(request: AiGroupRequest):
         return JSONResponse(status_code=500, content={"message": str(e)})
 
 @app.post("/export_docx_stream")
-async def export_docx_stream(request: ExportDocxRequest):
+async def export_docx_stream(http_request: Request, request: ExportDocxRequest):
     import base64
     questions = [q.model_dump() for q in request.questions]
+
+    user = http_request.session.get("user")
+    user_id = user["id"] if user else None
 
     async def event_generator():
         loop = asyncio.get_event_loop()
@@ -204,6 +275,10 @@ async def export_docx_stream(request: ExportDocxRequest):
                     return
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"report_{timestamp}.docx"
+                asyncio.run_coroutine_threadsafe(
+                    log_generated_report(request.session_id, user_id, filename, len(questions)),
+                    loop,
+                )
                 loop.call_soon_threadsafe(queue.put_nowait, {
                     "type": "done",
                     "file": base64.b64encode(analysis_bytes).decode(),

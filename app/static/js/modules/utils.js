@@ -8,7 +8,7 @@ window.appData = {};
 window.questionMerges = {};
 window.sessionId = null;
 
-const defaultColors = ['#FF0000', '#4472C4', '#70AD47', '#FFC000', '#ED7D31', '#A5A5A5', '#5B9BD5', '#C00000', '#00B050', '#7030A0'];
+const defaultColors = (window.APP_CONFIG && window.APP_CONFIG.defaultFileColors) || ['#FF0000', '#4472C4', '#70AD47', '#FFC000', '#ED7D31', '#A5A5A5', '#5B9BD5', '#C00000', '#00B050', '#7030A0'];
 
 // ===================== UTILITY FUNCTIONS =====================
 

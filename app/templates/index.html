@@ -22,35 +22,7 @@
 </head>
 <body class="ui-system-font wizard-body">
 
-    <nav class="navbar navbar-dark bg-primary shadow-sm navbar-no-shrink">
-        <div class="container-fluid px-4">
-            <a class="navbar-brand" href="/"><i class="fa-solid fa-chart-pie me-2"></i>МГУ им. Огарева | Аналитика опросов</a>
-            <div class="d-flex align-items-center gap-2">
-                <button class="btn btn-outline-light btn-sm" id="themeToggleBtn" title="Переключить тему">
-                    <i class="fa-solid fa-moon" id="themeIcon"></i>
-                </button>
-                <div class="dropdown ms-1">
-                    <button class="btn btn-link p-0 d-flex align-items-center gap-2 text-decoration-none border-0"
-                            data-bs-toggle="dropdown" aria-expanded="false" style="outline:none;">
-                        {% if user.photo_url %}
-                        <img src="{{ user.photo_url }}" alt="" class="rounded-circle" style="width:30px;height:30px;object-fit:cover;">
-                        {% else %}
-                        <i class="fa-solid fa-circle-user fa-lg text-white-50"></i>
-                        {% endif %}
-                        <span class="text-white small d-none d-md-inline">{{ user.short_fio or user.fio }}</span>
-                        <i class="fa-solid fa-chevron-down text-white-50" style="font-size:0.65rem;"></i>
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end mt-1">
-                        <li>
-                            <a class="dropdown-item text-danger dropdown-item-logout" href="/auth/logout">
-                                <i class="fa-solid fa-right-from-bracket me-2"></i>Выйти
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </nav>
+    {% include 'partials/navbar.html' %}
 
     <div class="wizard-outer">
         <div class="wizard-container">
@@ -69,6 +41,7 @@
     {% include 'partials/modals.html' %}
     {% include 'partials/templates.html' %}
 
+    <script>window.APP_CONFIG = {{ js_config | tojson }};</script>
     <script src="{{ url_for('static', path='js/bootstrap.bundle.min.js') }}"></script>
     <script src="{{ url_for('static', path='js/transliteration.min.js') }}"></script>
     <script src="{{ url_for('static', path='js/countries.js') }}"></script>

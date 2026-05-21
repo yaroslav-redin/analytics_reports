@@ -19,7 +19,7 @@ window.updateChartDefaults = () => {
     });
 };
 
-const PIE_COLORS = [
+const PIE_COLORS = (window.APP_CONFIG && window.APP_CONFIG.pieColors) || [
     '#dc3545','#0d6efd','#198754','#ffc107','#6f42c1',
     '#fd7e14','#20c997','#0dcaf0','#6c757d','#343a40',
     '#e15759','#4e79a7','#59a14f','#edc948','#b07aa1',

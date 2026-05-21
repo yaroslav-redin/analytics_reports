@@ -521,6 +521,28 @@ document.getElementById('randomEditSectionColor').addEventListener('click', () =
     document.getElementById('editSectionColor').value = randomColor();
 });
 
+(function () {
+    const btn = document.getElementById('toStep5Btn');
+    const tip = document.getElementById('toStep5VizWarning');
+    if (!btn || !tip) return;
+
+    function _hasVizQuestions() {
+        return (window.reportSections || []).some(sec => sec.questions.some(q => q.visualize));
+    }
+
+    btn.addEventListener('mouseenter', () => {
+        if (!_hasVizQuestions()) {
+            tip.classList.remove('d-none');
+            tip.style.animation = 'none';
+            tip.offsetWidth; // reflow
+            tip.style.animation = '';
+        }
+    });
+    btn.addEventListener('mouseleave', () => {
+        tip.classList.add('d-none');
+    });
+}());
+
 function _renderAttachedDonors(sourceName) {
     let attachedBlock = document.getElementById('mergeQuestionsAttached');
     if (!attachedBlock) {

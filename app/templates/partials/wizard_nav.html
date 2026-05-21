@@ -40,9 +40,14 @@
         </div>
         <!-- Шаг 4: настройка -->
         <div class="nav-step-fwd d-none" data-fwd-step="3">
-            <button type="button" class="btn btn-primary px-4 nav-fwd-btn" id="toStep5Btn" disabled>
-                <i class="fa-solid fa-chart-line me-1"></i>К визуализации <i class="fa-solid fa-arrow-right ms-2"></i>
-            </button>
+            <div class="position-relative d-inline-block">
+                <div class="viz-warn-tip d-none" id="toStep5VizWarning">
+                    <i class="fa-solid fa-triangle-exclamation me-1"></i>Не забудьте выбрать вопросы для визуализации
+                </div>
+                <button type="button" class="btn btn-primary px-4 nav-fwd-btn" id="toStep5Btn" disabled>
+                    <i class="fa-solid fa-chart-line me-1"></i>К визуализации <i class="fa-solid fa-arrow-right ms-2"></i>
+                </button>
+            </div>
         </div>
         <!-- Шаг 5: просмотр -->
         <div class="nav-step-fwd d-none" data-fwd-step="4">

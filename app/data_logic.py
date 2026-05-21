@@ -2,6 +2,7 @@ import pandas as pd
 import re
 import os
 from datetime import datetime
+from app import config as cfg
 
 def clean_column_name(col_name):
     name = str(col_name).strip()
@@ -10,15 +11,16 @@ def clean_column_name(col_name):
     return name
 
 def clean_answer_text(answer):
-    if pd.isna(answer): return "Нет ответа"
+    placeholder = cfg.get("missing_value_placeholder", "Нет ответа")
+    if pd.isna(answer): return placeholder
     ans = str(answer).strip()
     ans = re.sub(r'^\s*\d+\s*[\)\.]\s*', '', ans)
     return ans
 
 def is_system_column(col_name):
     c = str(col_name).lower().strip()
-    sys_exact = ['id', 'айди', 'timestamp', 'email', 'почта', 'адрес электронной почты', 'время', 'дата', 'time', 'date']
-    sys_contains = ['время создания', 'дата создания', 'время заполнения', 'дата и время', 'время начала', 'время завершения', 'completion time', 'start time', 'время изменения', 'дата изменения', 'отметка времени']
+    sys_exact = cfg.get_json("system_columns_exact")
+    sys_contains = cfg.get_json("system_columns_contains")
     if c in sys_exact: return True
     for kw in sys_contains:
         if kw in c: return True
@@ -53,10 +55,11 @@ def unify_numbered_answers(series):
 
         return series.apply(apply_map)
     else:
-        return series.apply(lambda x: str(x).strip() if pd.notna(x) and str(x).strip() != 'nan' else "Нет ответа")
+        placeholder = cfg.get("missing_value_placeholder", "Нет ответа")
+        return series.apply(lambda x: str(x).strip() if pd.notna(x) and str(x).strip() != 'nan' else placeholder)
 
 def clean_age(age_str):
-    if pd.isna(age_str) or str(age_str).strip().lower() == 'nan': return "Нет ответа"
+    if pd.isna(age_str) or str(age_str).strip().lower() == 'nan': return cfg.get("missing_value_placeholder", "Нет ответа")
     numbers = re.findall(r'\d+', str(age_str))
     if numbers:
         val = int(numbers[0])
@@ -97,7 +100,7 @@ def _get_answer_counts(df, q_name, groups_cache):
     data = data.dropna()
     data = data[data.astype(str).str.strip() != ""]
     data = data[data.astype(str).str.lower() != "nan"]
-    data = data[data.astype(str) != "Нет ответа"]
+    data = data[data.astype(str) != cfg.get("missing_value_placeholder", "Нет ответа")]
     if data.empty:
         return {}
     counts = data.value_counts().reset_index()

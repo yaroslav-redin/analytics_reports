@@ -151,7 +151,7 @@ async function _doExport() {
         const response = await fetch('/export_docx_stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ questions }),
+            body: JSON.stringify({ questions, session_id: window.sessionId || null }),
             signal: _exportAbortController.signal
         });
 
@@ -188,7 +188,9 @@ async function _doExport() {
                     const fileBlob = new Blob([fileBytes], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
                     const fileUrl = URL.createObjectURL(fileBlob);
                     const a = document.createElement('a');
-                    a.href = fileUrl; a.download = msg.filename || 'report_analysis.docx';
+                    a.href = fileUrl;
+                    const customName = (document.getElementById('exportFilenameInput')?.value || '').trim();
+                    a.download = customName ? customName.replace(/\.docx$/i, '') + '.docx' : (msg.filename || 'report_analysis.docx');
                     document.body.appendChild(a); a.click();
                     document.body.removeChild(a); URL.revokeObjectURL(fileUrl);
 

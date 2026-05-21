@@ -12,7 +12,16 @@
 
         <div class="d-flex flex-column gap-3" style="max-width:780px;margin:0 auto;">
 
-            <div class="p-3 d-flex gap-2 mx-auto" style="max-width:390px;">
+            <div class="mx-auto" style="max-width:390px;width:100%;">
+                <label for="exportFilenameInput" class="form-label text-muted small mb-1"><span class="text-muted fw-normal"></span></label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="exportFilenameInput"
+                           placeholder="Название файла" maxlength="200">
+                    <span class="input-group-text text-muted">.docx</span>
+                </div>
+            </div>
+
+            <div class="p-3 d-flex gap-2 mx-auto" style="max-width:390px;width:100%;">
                 <button type="button" class="btn btn-primary flex-fill" id="downloadApiBtn">
                     <i class="fa-solid fa-file-arrow-down me-2"></i>Скачать отчёт
                 </button>

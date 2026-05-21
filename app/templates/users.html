@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<script>(function(){var t=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-bs-theme',t);})();</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Пользователи — МГУ Аналитика опросов</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', path='favicon.svg') }}">
+    <link href="{{ url_for('static', path='css/bootstrap.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', path='css/fontawesome.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', path='css/app.css') }}" rel="stylesheet">
+</head>
+<body>
+
+{% include 'partials/navbar.html' %}
+
+<div class="container py-4" style="max-width:1100px;">
+    <div class="mb-4">
+        <h5 class="mb-2"><i class="fa-solid fa-users me-2 text-primary"></i>Пользователи</h5>
+        <div class="d-flex align-items-center gap-2">
+            <a href="/" class="btn btn-outline-secondary btn-sm"><i class="fa-solid fa-arrow-left me-1"></i>Назад</a>
+            <span class="text-secondary small ms-2" id="totalCount"></span>
+        </div>
+    </div>
+
+    <div class="card settings-card">
+        <div class="card-body p-3">
+            <!-- toolbar -->
+            <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+                <div class="input-group input-group-sm" style="max-width:280px;">
+                    <span class="input-group-text"><i class="fa-solid fa-magnifying-glass"></i></span>
+                    <input type="text" class="form-control" id="searchInput" placeholder="Поиск…" autocomplete="off">
+                    <button class="btn btn-outline-secondary" id="clearSearch" title="Очистить" style="display:none;">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="ms-auto d-flex align-items-center gap-2">
+                    <label class="text-secondary small mb-0">Строк:</label>
+                    <select class="form-select form-select-sm" id="pageSizeSelect" style="width:auto;">
+                        <option value="10">10</option>
+                        <option value="25" selected>25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- table -->
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-2" id="usersTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width:40px;"></th>
+                            <th class="sortable" data-col="fio">ФИО <i class="fa-solid fa-sort ms-1 text-secondary" style="font-size:.7rem;"></i></th>
+                            <th class="sortable" data-col="email">Email <i class="fa-solid fa-sort ms-1 text-secondary" style="font-size:.7rem;"></i></th>
+                            <th class="sortable d-none d-md-table-cell" data-col="username">Логин <i class="fa-solid fa-sort ms-1 text-secondary" style="font-size:.7rem;"></i></th>
+                            <th class="d-none d-lg-table-cell">Роли</th>
+                            <th class="sortable d-none d-md-table-cell" data-col="created_at">Регистрация <i class="fa-solid fa-sort ms-1 text-secondary" style="font-size:.7rem;"></i></th>
+                            <th class="sortable" data-col="last_login">Последний вход <i class="fa-solid fa-sort ms-1 text-secondary" style="font-size:.7rem;"></i></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+
+            <!-- pagination -->
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div class="text-secondary small" id="paginationInfo"></div>
+                <nav><ul class="pagination pagination-sm mb-0" id="pagination"></ul></nav>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', path='js/bootstrap.bundle.min.js') }}"></script>
+<script>
+// ── theme toggle ──────────────────────────────────────────────────────────────
+(function(){
+    var btn = document.getElementById('themeToggleBtn');
+    var icon = document.getElementById('themeIcon');
+    function applyTheme(t) {
+        document.documentElement.setAttribute('data-bs-theme', t);
+        icon.className = t === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+        localStorage.setItem('theme', t);
+    }
+    applyTheme(localStorage.getItem('theme') || 'light');
+    btn.addEventListener('click', function() {
+        applyTheme(document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark');
+    });
+})();
+
+// ── data ──────────────────────────────────────────────────────────────────────
+const RAW = {{ users | tojson }};
+
+function fmtDate(s) {
+    if (!s) return '—';
+    // SQLite returns "YYYY-MM-DD HH:MM:SS"
+    const d = new Date(s.replace(' ', 'T') + 'Z');
+    if (isNaN(d)) return s;
+    return d.toLocaleString('ru-RU', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+
+function parseRoles(r) {
+    try { return JSON.parse(r || '[]'); } catch { return []; }
+}
+
+function avatarHtml(u) {
+    if (u.photo_url) return `<img src="${u.photo_url}" class="rounded-circle" style="width:30px;height:30px;object-fit:cover;" alt="">`;
+    const initials = (u.fio || '?').trim().split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
+    return `<div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-semibold" style="width:30px;height:30px;font-size:.7rem;flex-shrink:0;">${initials}</div>`;
+}
+
+// ── state ─────────────────────────────────────────────────────────────────────
+let filtered = [...RAW];
+let currentPage = 1;
+let pageSize = 25;
+let sortCol = 'last_login';
+let sortDir = 'desc';
+
+function getVal(row, col) {
+    return (row[col] || '').toLowerCase();
+}
+
+function applySort() {
+    filtered.sort((a, b) => {
+        const av = getVal(a, sortCol), bv = getVal(b, sortCol);
+        return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    });
+}
+
+function applyFilter(q) {
+    q = q.toLowerCase();
+    filtered = q ? RAW.filter(u =>
+        (u.fio||'').toLowerCase().includes(q) ||
+        (u.email||'').toLowerCase().includes(q) ||
+        (u.username||'').toLowerCase().includes(q) ||
+        (u.roles||'').toLowerCase().includes(q)
+    ) : [...RAW];
+}
+
+function render() {
+    const tbody = document.getElementById('tableBody');
+    const total = filtered.length;
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    if (currentPage > pages) currentPage = pages;
+
+    const start = (currentPage - 1) * pageSize;
+    const slice = filtered.slice(start, start + pageSize);
+
+    tbody.innerHTML = slice.map(u => {
+        const roles = parseRoles(u.roles);
+        const roleBadges = roles.length
+            ? roles.map(r => `<span class="badge text-bg-secondary fw-normal me-1" style="font-size:.7rem;">${r}</span>`).join('')
+            : '<span class="text-secondary small">—</span>';
+        return `<tr>
+            <td>${avatarHtml(u)}</td>
+            <td><div class="fw-medium">${u.fio||'—'}</div></td>
+            <td><a href="mailto:${u.email||''}" class="text-decoration-none">${u.email||'—'}</a></td>
+            <td class="d-none d-md-table-cell text-secondary small font-monospace">${u.username||'—'}</td>
+            <td class="d-none d-lg-table-cell">${roleBadges}</td>
+            <td class="d-none d-md-table-cell text-secondary small">${fmtDate(u.created_at)}</td>
+            <td class="text-secondary small">${fmtDate(u.last_login)}</td>
+        </tr>`;
+    }).join('') || `<tr><td colspan="7" class="text-center text-secondary py-4">Ничего не найдено</td></tr>`;
+
+    // info
+    const from = total ? start + 1 : 0;
+    const to = Math.min(start + pageSize, total);
+    document.getElementById('paginationInfo').textContent = `Показано ${from}–${to} из ${total}`;
+    document.getElementById('totalCount').textContent = `Всего: ${RAW.length}`;
+
+    // pagination
+    const pag = document.getElementById('pagination');
+    pag.innerHTML = '';
+    if (pages <= 1) return;
+
+    const addBtn = (label, page, disabled, active) => {
+        const li = document.createElement('li');
+        li.className = `page-item${disabled?' disabled':''}${active?' active':''}`;
+        li.innerHTML = `<a class="page-link" href="#">${label}</a>`;
+        if (!disabled && !active) li.addEventListener('click', e => { e.preventDefault(); currentPage = page; render(); });
+        pag.appendChild(li);
+    };
+
+    addBtn('‹', currentPage - 1, currentPage === 1);
+    const range = buildPageRange(currentPage, pages);
+    range.forEach(p => p === '…'
+        ? pag.insertAdjacentHTML('beforeend', '<li class="page-item disabled"><span class="page-link">…</span></li>')
+        : addBtn(p, p, false, p === currentPage)
+    );
+    addBtn('›', currentPage + 1, currentPage === pages);
+}
+
+function buildPageRange(cur, total) {
+    if (total <= 7) return Array.from({length: total}, (_, i) => i + 1);
+    if (cur <= 4) return [1,2,3,4,5,'…',total];
+    if (cur >= total - 3) return [1,'…',total-4,total-3,total-2,total-1,total];
+    return [1,'…',cur-1,cur,cur+1,'…',total];
+}
+
+// ── events ────────────────────────────────────────────────────────────────────
+document.getElementById('searchInput').addEventListener('input', function() {
+    document.getElementById('clearSearch').style.display = this.value ? '' : 'none';
+    applyFilter(this.value);
+    applySort();
+    currentPage = 1;
+    render();
+});
+
+document.getElementById('clearSearch').addEventListener('click', function() {
+    const inp = document.getElementById('searchInput');
+    inp.value = '';
+    this.style.display = 'none';
+    applyFilter('');
+    applySort();
+    currentPage = 1;
+    render();
+});
+
+document.getElementById('pageSizeSelect').addEventListener('change', function() {
+    pageSize = parseInt(this.value);
+    currentPage = 1;
+    render();
+});
+
+document.querySelectorAll('th.sortable').forEach(th => {
+    th.style.cursor = 'pointer';
+    th.addEventListener('click', () => {
+        const col = th.dataset.col;
+        if (sortCol === col) {
+            sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+            sortCol = col;
+            sortDir = 'asc';
+        }
+        document.querySelectorAll('th.sortable i').forEach(i => i.className = 'fa-solid fa-sort ms-1 text-secondary');
+        th.querySelector('i').className = `fa-solid fa-sort-${sortDir === 'asc' ? 'up' : 'down'} ms-1 text-primary`;
+        applySort();
+        currentPage = 1;
+        render();
+    });
+});
+
+// ── init ──────────────────────────────────────────────────────────────────────
+applySort();
+render();
+// set initial sort icon
+document.querySelector(`th[data-col="${sortCol}"] i`).className = 'fa-solid fa-sort-down ms-1 text-primary';
+</script>
+</body>
+</html>

@@ -4,6 +4,7 @@ import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse, JSONResponse
 from urllib.parse import urlencode
+from app.database import upsert_user
 
 router = APIRouter()
 
@@ -39,6 +40,7 @@ async def login(request: Request):
         "redirect_uri": _REDIRECT_URI(),
         "scope": _SCOPE,
         "state": state,
+        "prompt": "login",
     })
     return RedirectResponse(f"{_AUTH_URL}?{params}")
 
@@ -89,7 +91,7 @@ async def auth_callback(request: Request):
     if allowed_role and allowed_role not in user_roles:
         return RedirectResponse("/login?error=access_denied")
 
-    request.session["user"] = {
+    user_data = {
         "id": user["Id"],
         "fio": user["FIO"],
         "short_fio": _short_fio(user["FIO"]),
@@ -98,6 +100,8 @@ async def auth_callback(request: Request):
         "roles": user_roles,
         "photo_url": (user.get("Photo") or {}).get("UrlSmall", ""),
     }
+    request.session["user"] = user_data
+    await upsert_user(user_data)
     return RedirectResponse("/")
 
 

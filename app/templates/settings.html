@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<script>(function(){var t=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-bs-theme',t);})();</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Настройки — МГУ Аналитика опросов</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', path='favicon.svg') }}">
+    <link href="{{ url_for('static', path='css/bootstrap.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', path='css/fontawesome.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', path='css/app.css') }}" rel="stylesheet">
+</head>
+<body>
+
+{% include 'partials/navbar.html' %}
+
+<div class="container py-4 settings-section">
+    <div class="mb-4">
+        <h5 class="mb-2"><i class="fa-solid fa-gear me-2 text-primary"></i>Настройки</h5>
+        <div class="d-flex align-items-center gap-2">
+            <a href="/" class="btn btn-outline-secondary btn-sm"><i class="fa-solid fa-arrow-left me-1"></i>Назад</a>
+            <div class="ms-auto d-flex gap-2">
+                <button id="resetBtn" class="btn btn-outline-secondary btn-sm" title="Сбросить все значения к стандартным">
+                    <i class="fa-solid fa-rotate-left me-1"></i>Сбросить к умолчаниям
+                </button>
+                <button id="saveBtn" class="btn btn-primary btn-sm px-4">
+                    <i class="fa-solid fa-floppy-disk me-1"></i>Сохранить
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Sidebar nav -->
+        <div class="col-12 col-md-3">
+            <ul class="nav nav-pills flex-column gap-1" id="settingsTabs">
+                <li class="nav-item"><a class="nav-link active" href="#" data-tab="llm"><i class="fa-solid fa-robot me-2"></i>LLM и API</a></li>
+                <li class="nav-item"><a class="nav-link" href="#" data-tab="prompts"><i class="fa-solid fa-file-lines me-2"></i>Промпты — анализ</a></li>
+                <li class="nav-item"><a class="nav-link" href="#" data-tab="grouping"><i class="fa-solid fa-layer-group me-2"></i>Промпт — нормализация</a></li>
+                <li class="nav-item"><a class="nav-link" href="#" data-tab="colors"><i class="fa-solid fa-palette me-2"></i>Цвета</a></li>
+                <li class="nav-item"><a class="nav-link" href="#" data-tab="data"><i class="fa-solid fa-table me-2"></i>Обработка данных</a></li>
+            </ul>
+        </div>
+
+        <!-- Content -->
+        <div class="col-12 col-md-9">
+            <div id="tabContent">
+
+                <!-- LLM и API -->
+                <div class="tab-pane" data-pane="llm">
+                    <div class="card settings-card">
+                        <div class="card-body">
+                            <h6 class="fw-semibold mb-3">LLM и API</h6>
+                            <div class="mb-3">
+                                <label class="settings-label">OpenRouter API Key</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control form-control-sm font-monospace" id="s_openrouter_api_key"
+                                           autocomplete="new-password" style="-webkit-text-security:disc;text-security:disc;">
+                                    <button class="btn btn-outline-secondary" type="button" id="toggleApiKeyBtn"
+                                            onclick="toggleApiKey()" title="Показать/скрыть">
+                                        <i class="fa-solid fa-eye" id="toggleApiKeyIcon"></i>
+                                    </button>
+                                </div>
+                                <div class="settings-hint">Получить на <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a>. Если задан в <code>.env</code>, оставьте пустым.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="settings-label">ID модели</label>
+                                <input type="text" class="form-control form-control-sm font-monospace" id="s_openrouter_model" placeholder="meta-llama/llama-3.3-70b-instruct:free">
+                                <div class="settings-hint">Список моделей: <a href="https://openrouter.ai/models" target="_blank">openrouter.ai/models</a></div>
+                            </div>
+                            <div class="row g-3">
+                                <div class="col-sm-4">
+                                    <label class="settings-label">Температура</label>
+                                    <input type="number" class="form-control form-control-sm" id="s_llm_temperature" min="0" max="2" step="0.05">
+                                    <div class="settings-hint">0 — детерминировано, 1 — творчески</div>
+                                </div>
+                                <div class="col-sm-4">
+                                    <label class="settings-label">Токены — анализ</label>
+                                    <input type="number" class="form-control form-control-sm" id="s_llm_max_tokens_analysis" min="100" max="16000" step="100">
+                                    <div class="settings-hint">Максимум для ответа LLM при генерации отчёта</div>
+                                </div>
+                                <div class="col-sm-4">
+                                    <label class="settings-label">Токены — нормализация</label>
+                                    <input type="number" class="form-control form-control-sm" id="s_llm_max_tokens_grouping" min="100" max="8000" step="100">
+                                    <div class="settings-hint">Максимум для ответа LLM при группировке ответов</div>
+                                </div>
+                            </div>
+                            <div class="mt-3 col-sm-4">
+                                <label class="settings-label">Задержка между запросами (сек)</label>
+                                <input type="number" class="form-control form-control-sm" id="s_llm_sleep_between_calls" min="0" max="120" step="1">
+                                <div class="settings-hint">Пауза между вызовами LLM при генерации отчёта</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Промпты анализа -->
+                <div class="tab-pane d-none" data-pane="prompts">
+                    <div class="card settings-card">
+                        <div class="card-body">
+                            <h6 class="fw-semibold mb-3">Промпты — генерация аналитики</h6>
+                            <div class="mb-3">
+                                <label class="settings-label">Системная роль</label>
+                                <textarea class="form-control form-control-sm font-monospace" id="s_prompt_system_role" rows="3"></textarea>
+                                <div class="settings-hint">Первая часть system-сообщения LLM (кто он такой)</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="settings-label">Правила написания</label>
+                                <textarea class="form-control form-control-sm" id="s_prompt_writing_rules" rows="8"></textarea>
+                                <div class="settings-hint">Инструкции по стилю — отправляются в user-промпте перед вопросом</div>
+                            </div>
+                            <div class="mb-1">
+                                <label class="settings-label">Примеры стиля (few-shot)</label>
+                                <textarea class="form-control form-control-sm font-monospace" id="s_prompt_style_example" rows="20"></textarea>
+                                <div class="settings-hint">Три примера аналитических фрагментов, которые демонстрируют модели нужный стиль</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Промпт нормализации -->
+                <div class="tab-pane d-none" data-pane="grouping">
+                    <div class="card settings-card">
+                        <div class="card-body">
+                            <h6 class="fw-semibold mb-3">Промпт — нормализация ответов</h6>
+                            <div class="alert alert-info py-2 small">
+                                Используйте <code>{question_name}</code> и <code>{answers}</code> как плейсхолдеры — они заменяются автоматически при вызове.
+                            </div>
+                            <textarea class="form-control form-control-sm font-monospace" id="s_prompt_grouping" rows="22"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Цвета -->
+                <div class="tab-pane d-none" data-pane="colors">
+                    <div class="card settings-card">
+                        <div class="card-body">
+                            <h6 class="fw-semibold mb-3">Цвета</h6>
+                            <div class="mb-4">
+                                <label class="settings-label">Палитра диаграмм</label>
+                                <div class="settings-hint mb-2">Цвета секторов круговых и столбцов диаграмм (применяются по порядку)</div>
+                                <div id="pieColorsContainer" class="d-flex flex-wrap gap-2 align-items-center">
+                                    <span class="text-secondary small">Загрузка…</span>
+                                </div>
+                                <button class="btn btn-outline-secondary btn-sm mt-2" onclick="addColor('pieColorsContainer')">
+                                    <i class="fa-solid fa-plus me-1"></i>Добавить цвет
+                                </button>
+                            </div>
+                            <div>
+                                <label class="settings-label">Цвета легенд файлов по умолчанию</label>
+                                <div class="settings-hint mb-2">Цвета, назначаемые легендам загруженных файлов на шаге визуализации</div>
+                                <div id="fileColorsContainer" class="d-flex flex-wrap gap-2 align-items-center">
+                                    <span class="text-secondary small">Загрузка…</span>
+                                </div>
+                                <button class="btn btn-outline-secondary btn-sm mt-2" onclick="addColor('fileColorsContainer')">
+                                    <i class="fa-solid fa-plus me-1"></i>Добавить цвет
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Обработка данных -->
+                <div class="tab-pane d-none" data-pane="data">
+                    <div class="card settings-card">
+                        <div class="card-body">
+                            <h6 class="fw-semibold mb-3">Обработка данных</h6>
+                            <div class="mb-3">
+                                <label class="settings-label">Системные столбцы — точные совпадения</label>
+                                <textarea class="form-control form-control-sm font-monospace" id="s_system_columns_exact" rows="6"></textarea>
+                                <div class="settings-hint">По одному значению на строку (регистр не важен). Столбцы с этими именами исключаются из анализа.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="settings-label">Системные столбцы — содержат подстроку</label>
+                                <textarea class="form-control form-control-sm font-monospace" id="s_system_columns_contains" rows="7"></textarea>
+                                <div class="settings-hint">По одному значению на строку. Столбцы, содержащие эту подстроку, исключаются из анализа.</div>
+                            </div>
+                            <div class="row g-3">
+                                <div class="col-sm-6">
+                                    <label class="settings-label">Заглушка для пустых ответов</label>
+                                    <input type="text" class="form-control form-control-sm" id="s_missing_value_placeholder">
+                                    <div class="settings-hint">Текст, которым заменяются пустые ячейки</div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="settings-label">Максимум файлов за загрузку</label>
+                                    <input type="number" class="form-control form-control-sm" id="s_max_upload_files" min="1" max="50">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div><!-- /tabContent -->
+        </div>
+    </div><!-- /row -->
+</div>
+
+<script src="{{ url_for('static', path='js/bootstrap.bundle.min.js') }}"></script>
+<script>
+// ── theme toggle ──────────────────────────────────────────────────────────────
+(function(){
+    var btn = document.getElementById('themeToggleBtn');
+    var icon = document.getElementById('themeIcon');
+    function applyTheme(t) {
+        document.documentElement.setAttribute('data-bs-theme', t);
+        icon.className = t === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+        localStorage.setItem('theme', t);
+    }
+    applyTheme(localStorage.getItem('theme') || 'light');
+    btn.addEventListener('click', function() {
+        applyTheme(document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark');
+    });
+})();
+
+// ── api key toggle ────────────────────────────────────────────────────────────
+function toggleApiKey() {
+    const input = document.getElementById('s_openrouter_api_key');
+    const icon = document.getElementById('toggleApiKeyIcon');
+    const masked = input.style.webkitTextSecurity === 'disc';
+    input.style.webkitTextSecurity = masked ? 'none' : 'disc';
+    input.style.textSecurity = masked ? 'none' : 'disc';
+    icon.className = masked ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
+}
+
+// ── tab switching ─────────────────────────────────────────────────────────────
+document.querySelectorAll('#settingsTabs .nav-link').forEach(link => {
+    link.addEventListener('click', e => {
+        e.preventDefault();
+        document.querySelectorAll('#settingsTabs .nav-link').forEach(l => l.classList.remove('active'));
+        link.classList.add('active');
+        const tab = link.dataset.tab;
+        document.querySelectorAll('#tabContent .tab-pane').forEach(p => {
+            p.classList.toggle('d-none', p.dataset.pane !== tab);
+        });
+    });
+});
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+function showToast(msg, type) {
+    type = type || 'success';
+    const bg = {success:'#198754',danger:'#dc3545',warning:'#e67e22'}[type] || '#198754';
+    let c = document.getElementById('toastContainer');
+    if (!c) { c = document.createElement('div'); c.id = 'toastContainer'; c.className = 'toast-container position-fixed top-0 end-0 p-3'; c.style.zIndex=99999; document.body.appendChild(c); }
+    const id = 'toast_' + Date.now();
+    c.insertAdjacentHTML('beforeend', `<div id="${id}" class="toast align-items-center text-white border-0" role="alert" style="background:${bg}"><div class="d-flex"><div class="toast-body fw-medium">${msg}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>`);
+    const el = document.getElementById(id);
+    new bootstrap.Toast(el, {delay:3500}).show();
+    el.addEventListener('hidden.bs.toast', () => el.remove());
+}
+
+// ── color palette editor ──────────────────────────────────────────────────────
+function renderColors(containerId, colors) {
+    const el = document.getElementById(containerId);
+    el.innerHTML = '';
+    colors.forEach((c, i) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'color-swatch-wrap';
+        wrap.innerHTML = `<input type="color" value="${c}" title="Цвет ${i+1}"><button class="del-color" onclick="this.closest('.color-swatch-wrap').remove()" title="Удалить">✕</button>`;
+        el.appendChild(wrap);
+    });
+}
+
+function addColor(containerId) {
+    const el = document.getElementById(containerId);
+    const wrap = document.createElement('div');
+    wrap.className = 'color-swatch-wrap';
+    wrap.innerHTML = `<input type="color" value="#888888"><button class="del-color" onclick="this.closest('.color-swatch-wrap').remove()" title="Удалить">✕</button>`;
+    el.appendChild(wrap);
+}
+
+function getColors(containerId) {
+    return Array.from(document.querySelectorAll(`#${containerId} input[type=color]`)).map(i => i.value);
+}
+
+// ── load settings ─────────────────────────────────────────────────────────────
+let _defaults = {};
+
+async function loadSettings() {
+    const res = await fetch('/api/settings');
+    if (!res.ok) return;
+    const s = await res.json();
+    _defaults = s;
+
+    document.getElementById('s_openrouter_api_key').value = s.openrouter_api_key || '';
+    document.getElementById('s_openrouter_model').value = s.openrouter_model || '';
+    document.getElementById('s_llm_temperature').value = s.llm_temperature || '';
+    document.getElementById('s_llm_max_tokens_analysis').value = s.llm_max_tokens_analysis || '';
+    document.getElementById('s_llm_max_tokens_grouping').value = s.llm_max_tokens_grouping || '';
+    document.getElementById('s_llm_sleep_between_calls').value = s.llm_sleep_between_calls || '';
+
+    document.getElementById('s_prompt_system_role').value = s.prompt_system_role || '';
+    document.getElementById('s_prompt_writing_rules').value = s.prompt_writing_rules || '';
+    document.getElementById('s_prompt_style_example').value = s.prompt_style_example || '';
+    document.getElementById('s_prompt_grouping').value = s.prompt_grouping || '';
+
+    try { renderColors('pieColorsContainer', JSON.parse(s.pie_colors)); } catch(e) { renderColors('pieColorsContainer', []); }
+    try { renderColors('fileColorsContainer', JSON.parse(s.default_file_colors)); } catch(e) { renderColors('fileColorsContainer', []); }
+
+    try { document.getElementById('s_system_columns_exact').value = JSON.parse(s.system_columns_exact).join('\n'); } catch(e) {}
+    try { document.getElementById('s_system_columns_contains').value = JSON.parse(s.system_columns_contains).join('\n'); } catch(e) {}
+
+    document.getElementById('s_missing_value_placeholder').value = s.missing_value_placeholder || '';
+    document.getElementById('s_max_upload_files').value = s.max_upload_files || '';
+}
+
+// ── save ──────────────────────────────────────────────────────────────────────
+document.getElementById('saveBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('saveBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Сохранение…';
+
+    const parseLines = id => JSON.stringify(
+        document.getElementById(id).value.split('\n').map(s => s.trim()).filter(Boolean)
+    );
+
+    const payload = {
+        openrouter_api_key:       document.getElementById('s_openrouter_api_key').value,
+        openrouter_model:         document.getElementById('s_openrouter_model').value,
+        llm_temperature:          document.getElementById('s_llm_temperature').value,
+        llm_max_tokens_analysis:  document.getElementById('s_llm_max_tokens_analysis').value,
+        llm_max_tokens_grouping:  document.getElementById('s_llm_max_tokens_grouping').value,
+        llm_sleep_between_calls:  document.getElementById('s_llm_sleep_between_calls').value,
+        prompt_system_role:       document.getElementById('s_prompt_system_role').value,
+        prompt_writing_rules:     document.getElementById('s_prompt_writing_rules').value,
+        prompt_style_example:     document.getElementById('s_prompt_style_example').value,
+        prompt_grouping:          document.getElementById('s_prompt_grouping').value,
+        pie_colors:               JSON.stringify(getColors('pieColorsContainer')),
+        default_file_colors:      JSON.stringify(getColors('fileColorsContainer')),
+        system_columns_exact:     parseLines('s_system_columns_exact'),
+        system_columns_contains:  parseLines('s_system_columns_contains'),
+        missing_value_placeholder: document.getElementById('s_missing_value_placeholder').value,
+        max_upload_files:         document.getElementById('s_max_upload_files').value,
+    };
+
+    // skip empty API key (don't overwrite with blank if user didn't touch it)
+    if (!payload.openrouter_api_key) delete payload.openrouter_api_key;
+
+    try {
+        const res = await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        if (res.ok) {
+            showToast('<i class="fa-solid fa-circle-check me-2"></i>Настройки сохранены', 'success');
+        } else {
+            showToast('Ошибка сохранения', 'danger');
+        }
+    } catch(e) {
+        showToast('Ошибка соединения', 'danger');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-floppy-disk me-1"></i>Сохранить';
+    }
+});
+
+// ── reset to defaults ─────────────────────────────────────────────────────────
+document.getElementById('resetBtn').addEventListener('click', async () => {
+    if (!confirm('Сбросить все настройки к стандартным значениям?')) return;
+    const res = await fetch('/api/settings/defaults');
+    if (!res.ok) return;
+    const defaults = await res.json();
+    // overwrite current settings in DB with defaults
+    await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(defaults) });
+    await loadSettings();
+    showToast('Настройки сброшены к умолчаниям', 'success');
+});
+
+loadSettings();
+</script>
+</body>
+</html>
