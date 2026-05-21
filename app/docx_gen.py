@@ -1,11 +1,41 @@
 import io
 import time
 import random
+import json
+import hashlib
+import threading
 from openai import OpenAI
 from docx import Document
 from docx.shared import Pt, Cm
 from app.chart_gen import insert_visualization
 from app import config as cfg
+
+
+# ===================== КЭШ АНАЛИТИКИ В ПАМЯТИ ПРОЦЕССА =====================
+# Сбрасывается при рестарте uvicorn; этого достаточно для одной сессии работы
+# и для случаев когда пользователь жмёт «экспорт» повторно с теми же данными.
+
+_analysis_cache: dict[str, str] = {}
+_analysis_cache_lock = threading.Lock()
+
+
+def _cache_key(q: dict, sec_name: str, sec_desc: str) -> str:
+    payload = json.dumps(
+        {
+            "q":     q.get("question_name"),
+            "rows":  q.get("rows"),
+            "sec":   sec_name,
+            "desc":  sec_desc,
+            "model": cfg.get("openrouter_model"),
+            # включаем стиль/правила в ключ — при правке промпта кэш инвалидируется
+            "style": hashlib.md5(cfg.get("prompt_style_example").encode()).hexdigest(),
+            "rules": hashlib.md5(cfg.get("prompt_writing_rules").encode()).hexdigest(),
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.md5(payload.encode("utf-8")).hexdigest()
 
 
 # ===================== SINGLETON КЛИЕНТ И PACING =====================
@@ -230,15 +260,123 @@ def _call_llm(prompt: str, system: str = "") -> str:
                 raise
 
 
+# ===================== ПАРАЛЛЕЛЬНАЯ ГЕНЕРАЦИЯ ТЕКСТОВ =====================
+
+# Максимум одновременных запросов к OpenRouter. Для free-tier 3 — безопасный
+# потолок: больше — будет много 429.
+_MAX_CONCURRENCY = 3
+
+
+def _generate_texts_parallel(
+    questions: list,
+    cancel_event=None,
+    progress_callback=None,
+) -> list[dict]:
+    """
+    Параллельно генерирует аналитические тексты для всех вопросов.
+    Возвращает список словарей в том же порядке, что и questions:
+      {'text': str | None, 'skipped': bool, 'error': bool}
+    """
+    semaphore = threading.Semaphore(_MAX_CONCURRENCY)
+    results: list[dict | None] = [None] * len(questions)
+    done_counter = {"n": 0}
+    counter_lock = threading.Lock()
+    total = len(questions)
+
+    def _worker(idx: int, q: dict):
+        if cancel_event and cancel_event.is_set():
+            results[idx] = {"text": None, "skipped": True, "error": False}
+            return
+
+        # Защитный no-op: если когда-нибудь добавим skip_analytics — будет работать.
+        if q.get("skip_analytics", False):
+            results[idx] = {"text": None, "skipped": True, "error": False}
+            return
+
+        sec = q.get("section")
+        sec_name = sec.get("name") if sec else ""
+        sec_description = sec.get("description", "") if sec else ""
+
+        # Проверка кэша до захвата семафора — кэш-хиты не блокируют слоты.
+        key = _cache_key(q, sec_name, sec_description)
+        with _analysis_cache_lock:
+            cached = _analysis_cache.get(key)
+        if cached is not None:
+            results[idx] = {"text": cached, "skipped": False, "error": False}
+            print(f"  [{idx + 1}/{total}] CACHE: {q.get('question_name', '')[:40]}")
+        else:
+            with semaphore:
+                if cancel_event and cancel_event.is_set():
+                    results[idx] = {"text": None, "skipped": True, "error": False}
+                    return
+                try:
+                    system_prompt, user_prompt = _build_question_prompt(
+                        q, sec_name, sec_description
+                    )
+                    text = _call_llm(user_prompt, system=system_prompt)
+                    with _analysis_cache_lock:
+                        _analysis_cache[key] = text
+                    results[idx] = {"text": text, "skipped": False, "error": False}
+                    print(f"  [{idx + 1}/{total}] OK: {q.get('question_name', '')[:40]}")
+                except Exception as e:
+                    results[idx] = {
+                        "text": f"Ошибка генерации аналитики: {e}",
+                        "skipped": False,
+                        "error": True,
+                    }
+                    print(f"  [{idx + 1}/{total}] ERROR: {e}")
+
+        # Обновляем прогресс по мере фактического завершения (а не по порядку).
+        with counter_lock:
+            done_counter["n"] += 1
+            done_now = done_counter["n"]
+        if progress_callback:
+            try:
+                progress_callback(done_now, total, q.get("question_name", ""))
+            except Exception:
+                pass
+
+    threads: list[threading.Thread] = []
+    for i, q in enumerate(questions):
+        t = threading.Thread(target=_worker, args=(i, q), daemon=True)
+        threads.append(t)
+        t.start()
+
+    for t in threads:
+        t.join()
+
+    # На всякий случай: если какой-то слот остался None (теоретически невозможно).
+    for i, r in enumerate(results):
+        if r is None:
+            results[i] = {"text": None, "skipped": True, "error": False}
+    return results  # type: ignore[return-value]
+
+
 # ===================== АНАЛИТИКА (файл 2) =====================
 
 def generate_analysis_docx(questions: list, progress_callback=None, cancel_event=None) -> bytes:
-    """Аналитический файл: один вызов LLM на каждый вопрос."""
+    """
+    Аналитический файл. LLM-вызовы выполняются параллельно (до _MAX_CONCURRENCY),
+    после чего документ собирается строго в исходном порядке вопросов.
+    """
     doc = _make_doc()
     total_questions = len(questions)
     _last_section = None
     chart_counter = [1]
 
+    print(
+        f"Параллельная генерация {total_questions} вопросов "
+        f"(до {_MAX_CONCURRENCY} потоков)..."
+    )
+
+    # 1) Параллельно генерируем все тексты.
+    texts = _generate_texts_parallel(
+        questions,
+        cancel_event=cancel_event,
+        progress_callback=progress_callback,
+    )
+
+    # 2) Собираем документ по порядку.
     for idx, q in enumerate(questions, start=1):
         if cancel_event and cancel_event.is_set():
             break
@@ -246,11 +384,6 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
         sec = q.get("section")
         sec_name = sec.get("name") if sec else ""
         sec_description = sec.get("description", "") if sec else ""
-
-        if progress_callback:
-            progress_callback(idx, total_questions, q["question_name"])
-
-        print(f"[{idx}/{total_questions}] Генерация: {q['question_name']}")
 
         if sec_name and sec_name != _last_section:
             _last_section = sec_name
@@ -269,14 +402,10 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
             space_after=3,
         )
 
-        try:
-            system_prompt, user_prompt = _build_question_prompt(q, sec_name, sec_description)
-            analysis = _call_llm(user_prompt, system=system_prompt)
-            _p(doc, analysis, space_after=6)
-            print("  -> OK")
-        except Exception as e:
-            print(f"  -> ERROR: {e}")
-            _p(doc, f"Ошибка генерации аналитики: {e}", bold=True, space_after=4)
+        result = texts[idx - 1] or {}
+        if not result.get("skipped") and result.get("text"):
+            bold = bool(result.get("error"))
+            _p(doc, result["text"], bold=bold, space_after=6)
 
         insert_visualization(doc, q, chart_counter)
 
