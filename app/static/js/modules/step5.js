@@ -165,7 +165,8 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                 };
                 _setInputId('.setting-show-total', `total_${id}`);
                 _setInputId('.setting-highlight-top', `hl_${id}`);
-                _setInputId('.setting-vertical', `vert_${id}`);
+                _setInputId('.setting-table-vertical', `tvert_${id}`);
+                _setInputId('.setting-chart-vertical', `cvert_${id}`);
                 const legendInput = _setInputId('.setting-show-legend', `legend_${id}`);
                 legendInput.checked = item.file_keys.length > 1;
 
@@ -492,15 +493,21 @@ document.addEventListener('click', e => {
         });
     }
 
-    if (tab === 'bar' && !window.renderedTabs[id].bar) {
+    // Каждое переключение вкладки перерисовывает её содержимое из актуальных
+    // window.appData[id] — без этого правки, сделанные на одной вкладке, не
+    // видны при возврате на другую (DOM остаётся «застывшим» с прошлого рендера).
+    if (tab === 'table') {
+        renderTable(id);
+    }
+    if (tab === 'bar') {
         window.renderedTabs[id].bar = true;
         setTimeout(() => drawChart(id), 50);
     }
-    if (tab === 'stacked' && !window.renderedTabs[id].stacked) {
+    if (tab === 'stacked') {
         window.renderedTabs[id].stacked = true;
         setTimeout(() => drawStackedChart(id), 50);
     }
-    if (tab === 'pie' && !window.renderedTabs[id].pie) {
+    if (tab === 'pie') {
         window.renderedTabs[id].pie = true;
         setTimeout(() => drawPieChart(id), 50);
     }
@@ -509,7 +516,9 @@ document.addEventListener('click', e => {
         const dataObj = window.appData[id];
         if (dataObj) {
             const bothTableId = `both_table_${id}`;
-            window.appData[bothTableId] = JSON.parse(JSON.stringify(dataObj));
+            // АЛИАС, не deep-copy: правки в both-таблице должны менять источник,
+            // иначе диаграмма на той же вкладке не увидит изменений.
+            window.appData[bothTableId] = dataObj;
             const lastTab = dataObj._lastChartTab || 'bar';
             setTimeout(() => {
                 renderTable(bothTableId);

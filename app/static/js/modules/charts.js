@@ -221,6 +221,7 @@ document.getElementById('applyMergeBtn').addEventListener('click', () => {
     drawChart(id);
     drawStackedChart(id);
     drawPieChart(id);
+    _refreshBothChartIfNeeded(id);
 });
 
 document.getElementById('saveHideColBtn').addEventListener('click', () => {
@@ -585,6 +586,28 @@ function drawChartOnCanvas(sourceId, canvasId, colorEditorId) {
             layout: { padding: isHorizontal ? { right: 50 } : { top: 30 } }
         }
     });
+}
+
+
+/**
+ * Если переданный id принадлежит таблице на вкладке «Таблица + диаграмма»
+ * (формат `both_table_<sourceId>`), перерисовывает соответствующую диаграмму
+ * на той же вкладке. Все остальные id игнорирует.
+ *
+ * Нужен потому, что drawChart/drawStackedChart/drawPieChart ищут canvas по
+ * `canvas_<id>`, а для both-таблицы такого canvas нет — диаграмма живёт на
+ * отдельном canvas `both_canvas_<sourceId>` и рисуется через drawChartForBoth.
+ */
+function _refreshBothChartIfNeeded(targetId) {
+    if (typeof targetId !== 'string' || !targetId.startsWith('both_table_')) return;
+    const sourceId = targetId.slice('both_table_'.length);
+    const dataObj = window.appData[sourceId];
+    if (!dataObj) return;
+    const tabsEl = document.getElementById(`tabs_${sourceId}`);
+    const activeBtn = tabsEl ? tabsEl.querySelector('.viz-tab-btn.active') : null;
+    if (!activeBtn || activeBtn.dataset.tab !== 'both') return;
+    const lastTab = dataObj._lastChartTab || 'bar';
+    drawChartForBoth(sourceId, lastTab);
 }
 
 
@@ -1268,19 +1291,37 @@ document.addEventListener('change', (e) => {
         window.appData[e.target.dataset.id].options.highlightTop = e.target.checked;
         drawChart(e.target.dataset.id);
         renderTable(e.target.dataset.id);
+        _refreshBothChartIfNeeded(e.target.dataset.id);
     }
-    if (e.target.classList.contains('setting-vertical')) {
+    if (e.target.classList.contains('setting-table-vertical')) {
         const id = e.target.dataset.id;
         window.appData[id].options.tableVertical = e.target.checked;
-        window.appData[id].options.chartDirection = e.target.checked ? 'x' : 'y';
         renderTable(id);
+        // если активна вкладка "Таблица + диаграмма" — обновим и таблицу внутри неё
+        const bothTableId = `both_table_${id}`;
+        if (window.appData[bothTableId]) {
+            window.appData[bothTableId].options.tableVertical = e.target.checked;
+            renderTable(bothTableId);
+        }
+    }
+    if (e.target.classList.contains('setting-chart-vertical')) {
+        const id = e.target.dataset.id;
+        window.appData[id].options.chartDirection = e.target.checked ? 'x' : 'y';
         drawChart(id);
         drawStackedChart(id);
+        // если сейчас открыта вкладка "Таблица + диаграмма" — перерисуем и её график
+        const tabsEl = document.getElementById(`tabs_${id}`);
+        const activeBtn = tabsEl ? tabsEl.querySelector('.viz-tab-btn.active') : null;
+        if (activeBtn && activeBtn.dataset.tab === 'both') {
+            const lastTab = window.appData[id]._lastChartTab || 'bar';
+            drawChartForBoth(id, lastTab);
+        }
     }
     if (e.target.classList.contains('setting-highlight-color')) {
         window.appData[e.target.dataset.id].options.highlightColor = e.target.value;
         drawChart(e.target.dataset.id);
         renderTable(e.target.dataset.id);
+        _refreshBothChartIfNeeded(e.target.dataset.id);
     }
     if (e.target.classList.contains('pie-answer-color')) {
         const id = e.target.dataset.id;
@@ -1298,6 +1339,7 @@ document.addEventListener('change', (e) => {
         drawChart(e.target.dataset.id);
         drawStackedChart(e.target.dataset.id);
         drawPieChart(e.target.dataset.id);
+        _refreshBothChartIfNeeded(e.target.dataset.id);
     }
     if (e.target.classList.contains('modal-row-toggle')) {
         const id = e.target.dataset.id;
@@ -1307,6 +1349,7 @@ document.addEventListener('change', (e) => {
         drawChart(id);
         drawStackedChart(id);
         drawPieChart(id);
+        _refreshBothChartIfNeeded(id);
     }
     if (e.target.classList.contains('setting-show-legend')) {
         const id = e.target.dataset.id;
@@ -1314,6 +1357,7 @@ document.addEventListener('change', (e) => {
         drawChart(id);
         drawStackedChart(id);
         drawPieChart(id);
+        _refreshBothChartIfNeeded(id);
     }
 });
 
@@ -1373,6 +1417,7 @@ document.addEventListener('focusout', (e) => {
         drawChart(id);
         drawStackedChart(id);
         drawPieChart(id);
+        _refreshBothChartIfNeeded(id);
     }
     if (e.target.classList.contains('modal-answer-count') || e.target.classList.contains('modal-answer-text')) {
         const id = e.target.dataset.id;
