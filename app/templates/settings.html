@@ -36,6 +36,7 @@
             <ul class="nav nav-pills flex-column gap-1" id="settingsTabs">
                 <li class="nav-item"><a class="nav-link active" href="#" data-tab="llm"><i class="fa-solid fa-robot me-2"></i>LLM и API</a></li>
                 <li class="nav-item"><a class="nav-link" href="#" data-tab="prompts"><i class="fa-solid fa-file-lines me-2"></i>Промпты — анализ</a></li>
+                <li class="nav-item"><a class="nav-link" href="#" data-tab="conclusions"><i class="fa-solid fa-flag-checkered me-2"></i>Промпт — выводы разделов</a></li>
                 <li class="nav-item"><a class="nav-link" href="#" data-tab="grouping"><i class="fa-solid fa-layer-group me-2"></i>Промпт — нормализация</a></li>
                 <li class="nav-item"><a class="nav-link" href="#" data-tab="colors"><i class="fa-solid fa-palette me-2"></i>Цвета</a></li>
                 <li class="nav-item"><a class="nav-link" href="#" data-tab="data"><i class="fa-solid fa-table me-2"></i>Обработка данных</a></li>
@@ -113,6 +114,41 @@
                                 <label class="settings-label">Примеры стиля (few-shot)</label>
                                 <textarea class="form-control form-control-sm font-monospace" id="s_prompt_style_example" rows="20"></textarea>
                                 <div class="settings-hint">Три примера аналитических фрагментов, которые демонстрируют модели нужный стиль</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Промпт выводов разделов -->
+                <div class="tab-pane d-none" data-pane="conclusions">
+                    <div class="card settings-card">
+                        <div class="card-body">
+                            <h6 class="fw-semibold mb-3">Промпт — выводы по разделам</h6>
+                            <div class="alert alert-info py-2 small">
+                                Формируется один абзац-вывод на каждый раздел отчёта. Для вопросов без раздела выводы не генерируются.
+                                В качестве входных данных модель получает все вопросы раздела со статистикой ответов целиком.
+                            </div>
+                            <div class="mb-3">
+                                <label class="settings-label">Системная роль</label>
+                                <textarea class="form-control form-control-sm font-monospace" id="s_prompt_section_conclusion_system" rows="3"></textarea>
+                                <div class="settings-hint">Кем выступает модель при формулировании выводов раздела</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="settings-label">Правила написания выводов</label>
+                                <textarea class="form-control form-control-sm" id="s_prompt_section_conclusion_rules" rows="9"></textarea>
+                                <div class="settings-hint">Указывайте объём, стиль, формат (например: «3–5 предложений, 2–3 ключевых вывода»)</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="settings-label">Пример вывода (few-shot)</label>
+                                <textarea class="form-control form-control-sm font-monospace" id="s_prompt_section_conclusion_example" rows="12"></textarea>
+                                <div class="settings-hint">Эталонный фрагмент, на который ориентируется модель по стилю и структуре</div>
+                            </div>
+                            <div class="row g-3">
+                                <div class="col-sm-4">
+                                    <label class="settings-label">Токены — выводы раздела</label>
+                                    <input type="number" class="form-control form-control-sm" id="s_llm_max_tokens_section_conclusion" min="100" max="4000" step="50">
+                                    <div class="settings-hint">Максимум для ответа LLM при формировании выводов</div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -293,6 +329,11 @@ async function loadSettings() {
     document.getElementById('s_prompt_style_example').value = s.prompt_style_example || '';
     document.getElementById('s_prompt_grouping').value = s.prompt_grouping || '';
 
+    document.getElementById('s_prompt_section_conclusion_system').value  = s.prompt_section_conclusion_system  || '';
+    document.getElementById('s_prompt_section_conclusion_rules').value   = s.prompt_section_conclusion_rules   || '';
+    document.getElementById('s_prompt_section_conclusion_example').value = s.prompt_section_conclusion_example || '';
+    document.getElementById('s_llm_max_tokens_section_conclusion').value = s.llm_max_tokens_section_conclusion || '';
+
     try { renderColors('pieColorsContainer', JSON.parse(s.pie_colors)); } catch(e) { renderColors('pieColorsContainer', []); }
     try { renderColors('fileColorsContainer', JSON.parse(s.default_file_colors)); } catch(e) { renderColors('fileColorsContainer', []); }
 
@@ -324,6 +365,10 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
         prompt_writing_rules:     document.getElementById('s_prompt_writing_rules').value,
         prompt_style_example:     document.getElementById('s_prompt_style_example').value,
         prompt_grouping:          document.getElementById('s_prompt_grouping').value,
+        prompt_section_conclusion_system:  document.getElementById('s_prompt_section_conclusion_system').value,
+        prompt_section_conclusion_rules:   document.getElementById('s_prompt_section_conclusion_rules').value,
+        prompt_section_conclusion_example: document.getElementById('s_prompt_section_conclusion_example').value,
+        llm_max_tokens_section_conclusion: document.getElementById('s_llm_max_tokens_section_conclusion').value,
         pie_colors:               JSON.stringify(getColors('pieColorsContainer')),
         default_file_colors:      JSON.stringify(getColors('fileColorsContainer')),
         system_columns_exact:     parseLines('s_system_columns_exact'),

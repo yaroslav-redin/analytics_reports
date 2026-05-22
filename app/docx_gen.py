@@ -241,12 +241,15 @@ def _build_question_prompt(
 
 # ===================== ВЫЗОВ МОДЕЛИ =====================
 
-def _call_llm(prompt: str, system: str = "") -> str:
+def _call_llm(prompt: str, system: str = "", max_tokens: int | None = None) -> str:
     client = get_openrouter_client()
     messages = []
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
+
+    if max_tokens is None:
+        max_tokens = cfg.get_int("llm_max_tokens_analysis")
 
     _pace()
     for attempt in range(6):
@@ -254,7 +257,7 @@ def _call_llm(prompt: str, system: str = "") -> str:
             response = client.chat.completions.create(
                 model=cfg.get("openrouter_model"),
                 messages=messages,
-                max_tokens=cfg.get_int("llm_max_tokens_analysis"),
+                max_tokens=max_tokens,
                 temperature=cfg.get_float("llm_temperature"),
             )
             _mark_request_done()
@@ -277,6 +280,7 @@ def _generate_texts_parallel(
     questions: list,
     cancel_event=None,
     progress_callback=None,
+    progress_total: int | None = None,
 ) -> list[dict]:
     """
     Параллельно генерирует аналитические тексты для всех вопросов.
@@ -287,7 +291,7 @@ def _generate_texts_parallel(
     results: list[dict | None] = [None] * len(questions)
     done_counter = {"n": 0}
     counter_lock = threading.Lock()
-    total = len(questions)
+    total = progress_total if progress_total is not None else len(questions)
 
     def _worker(idx: int, q: dict):
         if cancel_event and cancel_event.is_set():
@@ -358,59 +362,323 @@ def _generate_texts_parallel(
     return results  # type: ignore[return-value]
 
 
+# ===================== ВЫВОДЫ ПО РАЗДЕЛАМ =====================
+
+_section_conclusion_cache: dict[str, str] = {}
+_section_conclusion_cache_lock = threading.Lock()
+
+
+def _section_conclusion_cache_key(sec_name: str, sec_desc: str, qs: list[dict]) -> str:
+    payload = json.dumps(
+        {
+            "name":  sec_name,
+            "desc":  sec_desc,
+            "qs":    [
+                {"q": q.get("question_name"), "rows": q.get("rows")}
+                for q in qs
+            ],
+            "model": cfg.get("openrouter_model"),
+            "sys":   hashlib.md5(cfg.get("prompt_section_conclusion_system").encode()).hexdigest(),
+            "rules": hashlib.md5(cfg.get("prompt_section_conclusion_rules").encode()).hexdigest(),
+            "ex":    hashlib.md5(cfg.get("prompt_section_conclusion_example").encode()).hexdigest(),
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.md5(payload.encode("utf-8")).hexdigest()
+
+
+def _build_section_conclusion_prompt(
+    sec_name: str,
+    sec_description: str,
+    questions_in_section: list[dict],
+) -> tuple[str, str]:
+    """Собирает system + user-промпт для выводов по разделу."""
+
+    # ── SYSTEM ──────────────────────────────────────────────────────────
+    system_parts = cfg.get("prompt_section_conclusion_system").splitlines()
+    if sec_description:
+        system_parts += [
+            "",
+            "## Контекст текущего раздела",
+            sec_description,
+            "",
+            "Используй этот контекст при формулировании выводов:",
+            "— Если здесь сформулировано конкретное требование или акцент — строго следуй ему "
+            "при выборе того, что вынести в выводы.",
+            "— Если это описание тематики или состава раздела — учитывай при интерпретации "
+            "статистики и формулировке обобщений.",
+            "— Если это пояснение или замечание — прими во внимание как фоновый контекст.",
+            "Академический стиль — инструмент, он не должен вступать в противоречие с контекстом раздела.",
+        ]
+    system_prompt = "\n".join(system_parts)
+
+    # ── USER ─────────────────────────────────────────────────────────────
+    lines = [
+        "Ниже — пример желаемого стиля выводов:",
+        cfg.get("prompt_section_conclusion_example"),
+        "",
+        "ПРАВИЛА НАПИСАНИЯ ВЫВОДОВ:",
+        cfg.get("prompt_section_conclusion_rules"),
+        "",
+        f"Раздел отчёта: «{sec_name}»",
+        "",
+    ]
+
+    if sec_description:
+        lines += [
+            "Описание раздела:",
+            sec_description,
+            "",
+        ]
+
+    lines += [
+        "Ниже — все вопросы этого раздела со статистикой ответов. "
+        "Сформулируй на основании СОВОКУПНОСТИ этих данных обобщающие выводы по разделу"
+        + (", опираясь в том числе на описание раздела выше." if sec_description else "."),
+        "",
+    ]
+
+    for q in questions_in_section:
+        lines.append(f"— Вопрос: «{q.get('question_name', '')}»")
+        for row in q.get("rows", []):
+            parts = []
+            for fk in q.get("file_keys", []):
+                label = q.get("file_labels", {}).get(fk, fk)
+                count = row["counts"].get(fk, 0)
+                total = q.get("file_totals", {}).get(fk, 0)
+                pct = round(count / total * 100, 1) if total > 0 else 0
+                parts.append(f"{label}: {count} ({pct}%)")
+            lines.append(f"    {row.get('answer', '')}: {'; '.join(parts)}")
+        lines.append("")
+
+    if sec_description:
+        lines.append(
+            "Перед формулировкой выводов сверься с описанием раздела выше — "
+            "оно задаёт акцент и рамку интерпретации данных."
+        )
+    lines.append(
+        "Напиши только связный текст выводов — без заголовка, без маркеров списков, "
+        "без нумерации, без преамбулы вроде «Итак,» или «В заключение,»."
+    )
+
+    return system_prompt, "\n".join(lines)
+
+
+def _generate_section_conclusions_parallel(
+    sections: list[dict],
+    cancel_event=None,
+    progress_callback=None,
+    progress_offset: int = 0,
+    progress_total: int | None = None,
+) -> list[dict]:
+    """
+    sections — упорядоченный список вида:
+       [{"name": str, "description": str, "questions": [q, q, ...]}, ...]
+    Возвращает параллельный список:
+       [{"text": str | None, "skipped": bool, "error": bool}, ...]
+    """
+    semaphore = threading.Semaphore(_MAX_CONCURRENCY)
+    results: list[dict | None] = [None] * len(sections)
+    done_counter = {"n": progress_offset}
+    counter_lock = threading.Lock()
+    total_for_progress = progress_total if progress_total is not None else len(sections)
+    max_tokens = cfg.get_int("llm_max_tokens_section_conclusion")
+
+    def _worker(idx: int, sec: dict):
+        if cancel_event and cancel_event.is_set():
+            results[idx] = {"text": None, "skipped": True, "error": False}
+            return
+
+        name = sec.get("name") or ""
+        desc = sec.get("description") or ""
+        qs = sec.get("questions") or []
+
+        key = _section_conclusion_cache_key(name, desc, qs)
+        with _section_conclusion_cache_lock:
+            cached = _section_conclusion_cache.get(key)
+        if cached is not None:
+            results[idx] = {"text": cached, "skipped": False, "error": False}
+            print(f"  [SEC CACHE] Выводы раздела «{name[:40]}»")
+        else:
+            with semaphore:
+                if cancel_event and cancel_event.is_set():
+                    results[idx] = {"text": None, "skipped": True, "error": False}
+                    return
+                try:
+                    sys_p, usr_p = _build_section_conclusion_prompt(name, desc, qs)
+                    text = _call_llm(usr_p, system=sys_p, max_tokens=max_tokens)
+                    with _section_conclusion_cache_lock:
+                        _section_conclusion_cache[key] = text
+                    results[idx] = {"text": text, "skipped": False, "error": False}
+                    print(f"  [SEC OK] Выводы раздела «{name[:40]}»")
+                except Exception as e:
+                    results[idx] = {
+                        "text": f"Ошибка генерации выводов: {e}",
+                        "skipped": False,
+                        "error": True,
+                    }
+                    print(f"  [SEC ERROR] «{name[:40]}»: {e}")
+
+        with counter_lock:
+            done_counter["n"] += 1
+            done_now = done_counter["n"]
+        if progress_callback:
+            try:
+                progress_callback(done_now, total_for_progress, f"Выводы: «{name}»")
+            except Exception:
+                pass
+
+    threads: list[threading.Thread] = []
+    for i, sec in enumerate(sections):
+        t = threading.Thread(target=_worker, args=(i, sec), daemon=True)
+        threads.append(t)
+        t.start()
+
+    for t in threads:
+        t.join()
+
+    for i, r in enumerate(results):
+        if r is None:
+            results[i] = {"text": None, "skipped": True, "error": False}
+    return results  # type: ignore[return-value]
+
+
 # ===================== АНАЛИТИКА (файл 2) =====================
+
+def _group_questions_by_section(questions: list) -> list[tuple[dict | None, list[dict]]]:
+    """
+    Группирует вопросы в исходном порядке: при смене section.name открывается
+    новая группа. Возвращает список (section_dict_or_None, [questions_in_group]).
+    Вопросы без раздела попадают в группу с section=None.
+    """
+    groups: list[tuple[dict | None, list[dict]]] = []
+    current_key: object = "__SENTINEL__"
+    for q in questions:
+        sec = q.get("section")
+        key = sec.get("name") if sec else None
+        if key != current_key:
+            groups.append((sec, []))
+            current_key = key
+        groups[-1][1].append(q)
+    return groups
+
 
 def generate_analysis_docx(questions: list, progress_callback=None, cancel_event=None) -> bytes:
     """
     Аналитический файл. LLM-вызовы выполняются параллельно (до _MAX_CONCURRENCY),
     после чего документ собирается строго в исходном порядке вопросов.
+    После всех вопросов раздела вставляется блок «Выводы раздела «...»» —
+    отдельный LLM-вызов на основании совокупности вопросов раздела.
+    Для вопросов без раздела выводы не формируются.
     """
     doc = _make_doc()
     total_questions = len(questions)
-    _last_section = None
     chart_counter = [1]
     table_counter = [1]
     part_counter = [1]
 
+    # 1) Группировка вопросов по разделам в порядке появления.
+    section_groups = _group_questions_by_section(questions)
+
+    # 2) Отбираем разделы, для которых нужны выводы (есть имя раздела и
+    #    хотя бы один вопрос). Сохраняем порядок появления.
+    sections_for_conclusion = [
+        {
+            "name":        sec.get("name", ""),
+            "description": sec.get("description", "") if sec else "",
+            "questions":   qs,
+        }
+        for sec, qs in section_groups
+        if sec and sec.get("name") and qs
+    ]
+    total_conclusions = len(sections_for_conclusion)
+
     print(
-        f"Параллельная генерация {total_questions} вопросов "
+        f"Параллельная генерация {total_questions} вопросов и "
+        f"{total_conclusions} выводов по разделам "
         f"(до {_MAX_CONCURRENCY} потоков)..."
     )
 
-    # 1) Параллельно генерируем все тексты.
+    grand_total = total_questions + total_conclusions
+
+    # 3) Параллельно генерируем все тексты вопросов.
     texts = _generate_texts_parallel(
         questions,
         cancel_event=cancel_event,
         progress_callback=progress_callback,
+        # шкала прогресса единая на весь экспорт: N вопросов + M выводов
+        progress_total=grand_total,
     )
 
-    # 2) Собираем документ по порядку.
-    for idx, q in enumerate(questions, start=1):
+    # 4) Параллельно генерируем выводы по всем подходящим разделам.
+    if sections_for_conclusion and not (cancel_event and cancel_event.is_set()):
+        conclusions = _generate_section_conclusions_parallel(
+            sections_for_conclusion,
+            cancel_event=cancel_event,
+            progress_callback=progress_callback,
+            progress_offset=total_questions,
+            progress_total=grand_total,
+        )
+    else:
+        conclusions = []
+
+    # Сопоставляем сгенерированные выводы их разделам через имя раздела
+    # (имена в пределах отчёта считаем уникальными, как и в текущей сборке).
+    conclusion_by_section_name: dict[str, dict] = {}
+    for sec_def, res in zip(sections_for_conclusion, conclusions):
+        conclusion_by_section_name[sec_def["name"]] = res
+
+    # 5) Сборка документа: проходим по группам в исходном порядке.
+    is_first_section_written = True
+    for group_idx, (sec, qs_in_group) in enumerate(section_groups):
         if cancel_event and cancel_event.is_set():
             break
 
-        sec = q.get("section")
         sec_name = sec.get("name") if sec else ""
         sec_description = sec.get("description", "") if sec else ""
 
-        if sec_name and sec_name != _last_section:
-            is_first_section = (_last_section is None)
-            _last_section = sec_name
-            if not is_first_section:
+        # Заголовок раздела (только для именованных разделов).
+        if sec_name:
+            if not is_first_section_written:
                 doc.add_page_break()
-            _p(doc, sec_name, bold=True, size=14,
-               space_before=(0 if is_first_section else 14),
-               space_after=14, center=True, first_line_indent=False)
+            _p(
+                doc, sec_name, bold=True, size=14,
+                space_before=(0 if is_first_section_written else 14),
+                space_after=14, center=True, first_line_indent=False,
+            )
             if sec_description:
                 _p(doc, sec_description, size=14, space_after=6)
+            is_first_section_written = False
 
-        result = texts[idx - 1] or {}
-        if not result.get("skipped") and result.get("text"):
-            bold = bool(result.get("error"))
-            for para_text in [p.strip() for p in result["text"].split("\n\n") if p.strip()]:
-                _p(doc, para_text, bold=bold, size=14, space_after=6)
+        # Вопросы раздела.
+        for q in qs_in_group:
+            if cancel_event and cancel_event.is_set():
+                break
+            # индекс вопроса в исходном списке — для попадания в texts
+            q_idx = questions.index(q)
+            result = texts[q_idx] or {}
+            if not result.get("skipped") and result.get("text"):
+                bold = bool(result.get("error"))
+                for para_text in [p.strip() for p in result["text"].split("\n\n") if p.strip()]:
+                    _p(doc, para_text, bold=bold, size=14, space_after=6)
 
-        insert_visualization(doc, q, chart_counter, table_counter, part_counter)
+            insert_visualization(doc, q, chart_counter, table_counter, part_counter)
+
+        # Выводы раздела — только для именованных разделов.
+        if sec_name and sec_name in conclusion_by_section_name:
+            conc = conclusion_by_section_name[sec_name]
+            if conc and not conc.get("skipped") and conc.get("text"):
+                _p(
+                    doc, f"Выводы раздела «{sec_name}»",
+                    bold=True, size=14,
+                    space_before=12, space_after=8,
+                    first_line_indent=False,
+                )
+                bold_text = bool(conc.get("error"))
+                for para_text in [p.strip() for p in conc["text"].split("\n\n") if p.strip()]:
+                    _p(doc, para_text, bold=bold_text, size=14, space_after=6)
 
     buf = io.BytesIO()
     doc.save(buf)
