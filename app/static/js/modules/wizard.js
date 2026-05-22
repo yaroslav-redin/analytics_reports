@@ -5,7 +5,7 @@ let currentWizardStep = 0;
 
 
 function _stepFromHash() {
-    // URL — 1-индексный (#step1..#step6, как в UI), внутреннее представление 0..5.
+    
     const m = (window.location.hash || '').match(/^#step(\d+)$/);
     if (!m) return null;
     const parsed = parseInt(m[1], 10);
@@ -14,16 +14,14 @@ function _stepFromHash() {
 }
 
 function _writeStepToHash(n) {
-    // replaceState — без добавления в history-стек браузера, чтобы кнопка «Назад»
-    // браузера не начала листать шаги визарда (current behavior preserved).
-    // Бонус: replaceState не вызывает hashchange — handler ниже не зацикливается.
+
     try {
-        const newHash = `#step${n + 1}`;   // +1, чтобы URL совпадал с нумерацией UI
+        const newHash = `#step${n + 1}`;   
         if (window.location.hash !== newHash) {
             window.history.replaceState(null, '', newHash);
         }
     } catch (e) {
-        // Например, под file:// история бывает ограничена — просто игнорируем.
+
     }
 }
 
@@ -40,8 +38,6 @@ function goToStep(n, opts) {
     const track = document.getElementById('wizardTrack');
     if (!track) return;
 
-    // При восстановлении после refresh не хотим листать промежуточные шаги
-    // под 450ms-анимацию. Опция {instant:true} — мгновенный переход.
     if (opts.instant) {
         track.style.transition = 'none';
     }
@@ -49,8 +45,6 @@ function goToStep(n, opts) {
     track.style.transform = `translateX(-${n * 100}%)`;
 
     if (opts.instant) {
-        // Форсим reflow, чтобы браузер применил transform без анимации,
-        // а уже потом вернулся к нормальному transition из CSS.
         void track.offsetWidth;
         track.style.transition = '';
     }
@@ -70,14 +64,6 @@ function goToStep(n, opts) {
     _writeStepToHash(n);
 }
 
-// На загрузке: восстанавливаем сохранённое состояние и навигируем на нужный
-// шаг. restoreState (из state.js) делает всё это в правильном порядке:
-//   1) грузит window.* из sessionStorage,
-//   2) выбирает целевой шаг (URL hash > сохранённый currentStep > 0),
-//   3) рехидрирует визуализацию (шаг 5) и баннер «Скачать снова» (шаг 6),
-//   4) вызывает goToStep(target).
-// Если state.js по какой-то причине не загрузился — fallback на простую
-// hash-навигацию.
 _onDomReady(() => {
     if (window._wizardState && typeof window._wizardState.restore === 'function') {
         try {
@@ -87,13 +73,11 @@ _onDomReady(() => {
             console.error('[wizard] restoreState failed, falling back to hash-only nav', e);
         }
     }
-    // Fallback: просто навигация по URL hash. Тоже без анимации —
-    // это первичная установка позиции, а не штатный переход.
+
     const target = _stepFromHash();
     if (target !== null && target !== currentWizardStep) {
         goToStep(target, { instant: true });
     }
-    // Снимаем класс, который мог поставить inline-скрипт в <head>.
     document.documentElement.classList.remove('wizard-restoring');
 });
 
@@ -134,7 +118,6 @@ document.getElementById('toStep5Btn').addEventListener('click', () => { renderLe
 document.getElementById('toStep6Btn').addEventListener('click', () => goToStep(5));
 
 function _resetFromStep(newStep) {
-    // Шаг 4 (визуализация): уничтожить графики, очистить данные анализа
     if (newStep < 4) {
         Object.values(window.charts || {}).forEach(c => { try { c.destroy(); } catch (e) {} });
         window.charts = {};
@@ -147,7 +130,6 @@ function _resetFromStep(newStep) {
         updateStep6Btn();
     }
 
-    // Шаг 3 (структура отчёта): очистить разделы
     if (newStep < 3) {
         window.reportSections = [];
         document.getElementById('sectionsList').innerHTML = '<p class="text-muted small text-center mt-3 px-2 mb-0"></p>';
@@ -156,7 +138,6 @@ function _resetFromStep(newStep) {
         if (selAllQ) selAllQ.checked = false;
     }
 
-    // Шаг 2 (выбор вопросов): очистить маппинг и списки
     if (newStep < 2) {
         window.questionMapping = {};
         window.questionSourceFile = {};
@@ -171,7 +152,6 @@ function _resetFromStep(newStep) {
         updateQuestionsBtn();
     }
 
-    // Шаг 1 (листы): очистить обработанные файлы и список листов
     if (newStep < 1) {
         window.processedFiles = [];
         document.getElementById('sheetCheckboxesContainer').innerHTML = '';

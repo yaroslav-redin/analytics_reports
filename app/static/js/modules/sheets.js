@@ -10,9 +10,7 @@ document.getElementById('sheetForm').addEventListener('submit', async (e) => {
         }
     });
 
-    // Сохраняем выбранные листы для последующей регидрации на refresh.
-    // processedFiles не несёт информации о том, какие именно листы были выбраны,
-    // поэтому без этого после refresh чекбоксы пришлось бы выставлять "наобум".
+    
     window.sheetSelections = Object.fromEntries(filesPayload.map(f => [f.filename, f.sheets]));
 
     document.getElementById('processSheetsBtn').disabled = true;
@@ -55,9 +53,7 @@ document.getElementById('sheetCheckboxesContainer').addEventListener('change', (
     }
 });
 
-// ===================== REHYDRATE (этап 4) =====================
-// Перерисовывает чекбоксы листов после refresh, опираясь на сохранённые
-// window.uploadedFiles и window.sheetSelections.
+
 
 function rehydrateSheetsUI() {
     if (!window.uploadedFiles || !window.uploadedFiles.length) return false;
@@ -71,8 +67,6 @@ function rehydrateSheetsUI() {
         container.insertAdjacentHTML('beforeend',
             `<div class="file-section-title">Файл ${fIdx + 1}: ${file.original_name}</div>`);
         file.sheets.forEach(sheet => {
-            // Если есть сохранённый выбор — используем его; иначе fallback на
-            // дефолтную логику «один лист → отметить автоматически».
             const savedForFile = selections[file.filename];
             const wasSelected = Array.isArray(savedForFile)
                 ? savedForFile.includes(sheet)

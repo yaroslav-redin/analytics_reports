@@ -243,59 +243,182 @@ async def ai_group_answers(request: AiGroupRequest):
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": str(e)})
 
-@app.post("/export_docx_stream")
-async def export_docx_stream(http_request: Request, request: ExportDocxRequest):
-    import base64
-    questions = [q.model_dump() for q in request.questions]
+# ===================== EXPORT TASK MANAGER =====================
 
+class ExportTask:
+    """Одна задача генерации .docx, живущая в памяти процесса до часа после завершения."""
+
+    def __init__(self, task_id: str, questions: list, session_id, user_id):
+        self.task_id = task_id
+        self.questions = questions
+        self.session_id = session_id
+        self.user_id = user_id
+        self.status = "running"   # "running" | "done" | "error" | "cancelled"
+        self.progress = {"current": 0, "total": len(questions), "label": ""}
+        self.result_b64: str | None = None
+        self.result_filename: str | None = None
+        self.error: str | None = None
+        self.created_at = time.time()
+        self.completed_at: float | None = None
+        self.cancel_event = threading.Event()
+        self.subscribers: list[asyncio.Queue] = []
+        self.loop: asyncio.AbstractEventLoop | None = None
+        self._lock = threading.Lock()
+
+    def _emit(self, msg: dict):
+        """Атомарно обновляет внутреннее состояние и оповещает подписчиков."""
+        with self._lock:
+            mtype = msg.get("type")
+            if mtype == "progress":
+                self.progress = {
+                    "current": msg["current"],
+                    "total":   msg["total"],
+                    "label":   msg.get("label", ""),
+                }
+            elif mtype == "done":
+                self.status = "done"
+                self.result_b64 = msg["file"]
+                self.result_filename = msg["filename"]
+                self.completed_at = time.time()
+            elif mtype == "error":
+                if self.status == "running":   
+                    self.status = "error"
+                    self.error = msg["message"]
+                    self.completed_at = time.time()
+            subs = list(self.subscribers)
+        if self.loop is not None:
+            for q in subs:
+                try:
+                    self.loop.call_soon_threadsafe(q.put_nowait, msg)
+                except Exception:
+                    pass
+
+    def on_progress(self, current, total, label):
+        if self.cancel_event.is_set():
+            return
+        self._emit({"type": "progress", "current": current, "total": total, "label": label})
+
+    def subscribe(self):
+        """Атомарно: возвращает свежий snapshot и регистрирует новую очередь.
+        Любые сообщения, эмитнутые ПОСЛЕ этого вызова, попадут в очередь."""
+        with self._lock:
+            snap = {
+                "status":   self.status,
+                "progress": dict(self.progress),
+                "file":     self.result_b64,
+                "filename": self.result_filename,
+                "error":    self.error,
+            }
+            queue = asyncio.Queue()
+            self.subscribers.append(queue)
+        return snap, queue
+
+    def unsubscribe(self, queue):
+        with self._lock:
+            if queue in self.subscribers:
+                self.subscribers.remove(queue)
+
+
+_export_tasks: dict[str, ExportTask] = {}
+_export_tasks_lock = threading.Lock()
+
+
+def _cleanup_old_export_tasks(max_age_seconds: int = 3600):
+    """Удалить задачи, завершённые более max_age_seconds назад."""
+    now = time.time()
+    with _export_tasks_lock:
+        for tid in list(_export_tasks.keys()):
+            t = _export_tasks[tid]
+            if t.completed_at and (now - t.completed_at) > max_age_seconds:
+                del _export_tasks[tid]
+
+
+@app.post("/export_docx_start")
+async def export_docx_start(http_request: Request, request: ExportDocxRequest):
+    """Стартует фоновую задачу генерации. Возвращает task_id для подписки на стрим."""
+    import base64
+
+    questions = [q.model_dump() for q in request.questions]
     user = http_request.session.get("user")
     user_id = user["id"] if user else None
 
-    async def event_generator():
-        loop = asyncio.get_event_loop()
-        queue = asyncio.Queue()
-        cancel_event = threading.Event()
+    task_id = str(uuid.uuid4())
+    task = ExportTask(task_id, questions, request.session_id, user_id)
+    task.loop = asyncio.get_running_loop()
 
-        def progress_cb(current, total, label):
-            if cancel_event.is_set():
-                return
-            loop.call_soon_threadsafe(
-                queue.put_nowait,
-                {"type": "progress", "current": current, "total": total, "label": label}
+    with _export_tasks_lock:
+        _export_tasks[task_id] = task
+
+    def run_generate():
+        try:
+            analysis_bytes = generate_analysis_docx(
+                questions,
+                progress_callback=task.on_progress,
+                cancel_event=task.cancel_event,
             )
-
-        def run_generate():
+            if task.cancel_event.is_set():
+                return
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"report_{timestamp}.docx"
             try:
-                analysis_bytes = generate_analysis_docx(
-                    questions,
-                    progress_callback=progress_cb,
-                    cancel_event=cancel_event,
-                )
-                if cancel_event.is_set():
-                    return
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"report_{timestamp}.docx"
                 asyncio.run_coroutine_threadsafe(
                     log_generated_report(request.session_id, user_id, filename, len(questions)),
-                    loop,
+                    task.loop,
                 )
-                loop.call_soon_threadsafe(queue.put_nowait, {
-                    "type": "done",
-                    "file": base64.b64encode(analysis_bytes).decode(),
-                    "filename": filename
-                })
-            except Exception as e:
-                loop.call_soon_threadsafe(queue.put_nowait, {"type": "error", "message": str(e)})
+            except Exception:
+                pass
+            file_b64 = base64.b64encode(analysis_bytes).decode()
+            task._emit({"type": "done", "file": file_b64, "filename": filename})
+        except Exception as e:
+            task._emit({"type": "error", "message": str(e)})
 
-        threading.Thread(target=run_generate, daemon=True).start()
+    threading.Thread(target=run_generate, daemon=True).start()
+    _cleanup_old_export_tasks()
 
+    return {"task_id": task_id}
+
+
+@app.get("/export_docx_stream/{task_id}")
+async def export_docx_stream(task_id: str):
+    """SSE-подписка на задачу. Клиент получает текущий snapshot и далее live-обновления.
+    Можно подключаться/отключаться сколько угодно раз — задача от этого не зависит."""
+    with _export_tasks_lock:
+        task = _export_tasks.get(task_id)
+    if task is None:
+        return JSONResponse(status_code=404, content={"message": "Задача не найдена или истекла"})
+
+    snap, queue = task.subscribe()
+
+    async def event_generator():
         try:
+            if snap["progress"]["current"] > 0:
+                yield f"data: {json.dumps({'type': 'progress', **snap['progress']}, ensure_ascii=False)}\n\n"
+
+            if snap["status"] == "done":
+                yield f"data: {json.dumps({'type': 'done', 'file': snap['file'], 'filename': snap['filename']}, ensure_ascii=False)}\n\n"
+                return
+            if snap["status"] in ("error", "cancelled"):
+                yield f"data: {json.dumps({'type': 'error', 'message': snap['error'] or 'Задача отменена'}, ensure_ascii=False)}\n\n"
+                return
+
             while True:
                 msg = await queue.get()
                 yield f"data: {json.dumps(msg, ensure_ascii=False)}\n\n"
-                if msg["type"] in ("done", "error"):
+                if msg.get("type") in ("done", "error"):
                     break
         finally:
-            cancel_event.set()
+            task.unsubscribe(queue)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.post("/export_docx_cancel/{task_id}")
+async def export_docx_cancel(task_id: str):
+    """Запросить отмену задачи. cancel_event проверяется внутри генератора между шагами."""
+    with _export_tasks_lock:
+        task = _export_tasks.get(task_id)
+    if task is None:
+        return JSONResponse(status_code=404, content={"message": "Задача не найдена"})
+    task.cancel_event.set()
+    task._emit({"type": "error", "message": "Генерация отменена пользователем"})
+    return {"ok": True}

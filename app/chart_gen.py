@@ -135,7 +135,7 @@ def _bar_xml(answers, series_labels, series_values,
 
     for si, (lbl, vals) in enumerate(zip(series_labels, series_values)):
         col = chr(ord('B') + si)
-        # Заголовок серии
+
         out += [
             f'        <c:ser>',
             f'          <c:idx val="{si}"/><c:order val="{si}"/>',
@@ -144,7 +144,7 @@ def _bar_xml(answers, series_labels, series_values,
             f'              <c:pt idx="0"><c:v>{_x(lbl)}</c:v></c:pt>',
             f'            </c:strCache></c:strRef></c:tx>',
         ]
-        # Цвет всей серии (OOXML требует spPr именно после tx)
+
         series_hex = ''
         if series_colors and si < len(series_colors):
             series_hex = _color_hex(series_colors[si])
@@ -154,7 +154,7 @@ def _bar_xml(answers, series_labels, series_values,
                 f'<a:ln><a:noFill/></a:ln></c:spPr>'
             )
         out.append('          <c:invertIfNegative val="0"/>')
-        # Цвета точек (single-file, одна серия, разноцветные столбики)
+
         if point_colors and not stacked:
             for pi, pc in enumerate(point_colors):
                 phex = _color_hex(pc)
@@ -169,7 +169,7 @@ def _bar_xml(answers, series_labels, series_values,
                     f'<a:ln><a:noFill/></a:ln></c:spPr>',
                     f'          </c:dPt>',
                 ]
-        # Подписи: жирный чёрный процент. Stacked → по центру сегмента, иначе → outEnd.
+
         out += _data_labels_block(
             pos='ctr' if stacked else 'outEnd',
             show_val=True,
@@ -197,7 +197,7 @@ def _bar_xml(answers, series_labels, series_values,
             f'        </c:ser>',
         ]
 
-    # Ширина зазора между столбиками; для накопленной — плотная (overlap=100)
+
     if stacked:
         out += [
             '        <c:gapWidth val="60"/>',
@@ -227,13 +227,10 @@ def _bar_xml(answers, series_labels, series_values,
         '      </c:valAx>',
         '    </c:plotArea>',
     ]
-    # Когда single-file и каждый столбик свой цвет (через dPt),
-    # Word плодит легенду по каждой точке — это дублирует подписи на оси.
-    # В таком случае легенду не показываем вообще (она бессмысленна).
+
     effective_show_legend = show_legend and not (point_colors and not stacked)
     if effective_show_legend:
-        # overlay=0 гарантирует, что легенда не наезжает на область диаграммы,
-        # а layout с y=0.88 жёстко прижимает её к низу.
+
         out += [
             '    <c:legend>',
             '      <c:legendPos val="b"/>',
@@ -438,8 +435,6 @@ def insert_visualization(doc, q: dict, chart_counter: list,
         run.font.size = Pt(12)
         return para
 
-    # Один номер «Рисунок N» на весь вопрос: резервируется лениво при первой
-    # вставке диаграммы и переиспользуется для всех последующих.
     fig_state = {'n': None}
 
     def _fig_num():

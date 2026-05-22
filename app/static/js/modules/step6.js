@@ -5,16 +5,11 @@ let _exportAbortController = null;
 // ── Сохранение и восстановление результата экспорта ─────────────────────────
 
 function _storeExportResult(b64, filename) {
-    // Сохраняем base64 готового .docx в window.exportResult, чтобы после
-    // refresh страницы пользователь мог скачать файл повторно без перегенерации.
     window.exportResult = {
         file: b64,
         filename: filename || 'report_analysis.docx',
         generatedAt: Date.now(),
     };
-    // Форсируем сохранение в sessionStorage сразу — без 1.5с throttle.
-    // Если файл слишком большой и не влезет — state.js гарантирует, что
-    // лёгкие ключи всё равно будут сохранены без HEAVY (без exportResult).
     if (window._wizardState && typeof window._wizardState.save === 'function') {
         window._wizardState.save();
     }
@@ -35,8 +30,6 @@ function _downloadExportResult(exportResult) {
 }
 
 function restoreExportButtons(exportResult) {
-    // На refresh шага 6: если сохранён готовый .docx — показываем баннер с
-    // кнопкой «Скачать снова» в начале шага. Возвращает true, если что-то нарисовали.
     if (!exportResult || !exportResult.file) return false;
 
     const step6Container = document.getElementById('wizardStep5');   // 0-индекс: шаг 6 = wizardStep5
@@ -77,15 +70,34 @@ function restoreExportButtons(exportResult) {
 
 window.restoreExportButtons = restoreExportButtons;
 
-// Цвета хранятся индексами по активным строкам (отсортированным по _total desc).
-// Срезаем по количеству активных строк, чтобы не отправлять лишние.
+
 function _collectColorsForActive(dataObj, colorsArr) {
     if (!Array.isArray(colorsArr)) return [];
     const activeLen = dataObj.data.filter(r => r.included !== false).length;
     return colorsArr.slice(0, activeLen);
 }
 
-document.getElementById('exportStopBtn').addEventListener('click', () => {
+let _currentTaskId = null;
+
+let _downloadBtnDefaultHtml = null;
+function _captureDownloadBtnDefault() {
+    if (_downloadBtnDefaultHtml === null) {
+        const b = document.getElementById('downloadApiBtn');
+        if (b) _downloadBtnDefaultHtml = b.innerHTML;
+    }
+    return _downloadBtnDefaultHtml;
+}
+_captureDownloadBtnDefault();
+
+document.getElementById('exportStopBtn').addEventListener('click', async () => {
+    
+    const tid = _currentTaskId || (window.exportTask && window.exportTask.task_id);
+    if (tid) {
+        try {
+            await fetch(`/export_docx_cancel/${tid}`, { method: 'POST' });
+        } catch (e) {  }
+    }
+
     if (_exportAbortController) _exportAbortController.abort();
 });
 
@@ -96,10 +108,10 @@ async function _doExport() {
         return;
     }
 
-    // Индекс question_name → id в appData для быстрого поиска
+
     const nameToId = {};
     for (const id of Object.keys(window.appData)) {
-        if (id.startsWith('both_table_')) continue;  // пропускаем копии для both-панели
+        if (id.startsWith('both_table_')) continue; 
         const qName = window.appData[id].question_name;
         if (qName) nameToId[qName] = id;
     }
@@ -224,8 +236,66 @@ async function _doExport() {
         return;
     }
 
+
     const btn = document.getElementById('downloadApiBtn');
-    const origHtml = btn.innerHTML;
+    _captureDownloadBtnDefault();
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Запуск...';
+
+    let taskId = null;
+    try {
+        console.table(questions.map(q => ({
+            name: q.question_name.substring(0, 30),
+            viz_tab: q.viz_tab,
+            both_chart_type: q.both_chart_type,
+            skip: q.skip_analytics
+        })));
+
+        const startResp = await fetch('/export_docx_start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ questions, session_id: window.sessionId || null }),
+        });
+        if (!startResp.ok) {
+            const data = await startResp.json().catch(() => ({}));
+            showToast(data.message || 'Ошибка запуска генерации', 'danger');
+            btn.disabled = false;
+            btn.innerHTML = _downloadBtnDefaultHtml || 'Скачать .docx';
+            return;
+        }
+        const startData = await startResp.json();
+        taskId = startData.task_id;
+        if (!taskId) {
+            showToast('Сервер не вернул task_id', 'danger');
+            btn.disabled = false;
+            btn.innerHTML = _downloadBtnDefaultHtml || 'Скачать .docx';
+            return;
+        }
+
+        
+        window.exportTask = { task_id: taskId, startedAt: Date.now() };
+        if (window._wizardState && typeof window._wizardState.save === 'function') {
+            window._wizardState.save();
+        }
+    } catch (err) {
+        showToast('Ошибка соединения с сервером при запуске', 'danger');
+        btn.disabled = false;
+        btn.innerHTML = _downloadBtnDefaultHtml || 'Скачать .docx';
+        return;
+    }
+
+
+    await _streamExportTask(taskId);
+}
+
+
+
+async function _streamExportTask(taskId) {
+    if (!taskId) return;
+    _currentTaskId = taskId;
+    _captureDownloadBtnDefault();
+
+    const btn = document.getElementById('downloadApiBtn');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Генерация...';
 
@@ -237,38 +307,38 @@ async function _doExport() {
     if (progressContainer) progressContainer.classList.remove('d-none');
     if (progressBar) progressBar.style.width = '0%';
     if (progressText) progressText.textContent = '';
-    if (progressLabel) progressLabel.textContent = '';
+    if (progressLabel) progressLabel.textContent = 'Подключение к задаче…';
     if (stopBtn) stopBtn.disabled = false;
 
     _exportAbortController = new AbortController();
 
-    const _exportStartTime = Date.now();
+
+    const startTime = (window.exportTask && window.exportTask.startedAt) || Date.now();
     const _exportTimerInterval = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - _exportStartTime) / 1000);
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
         const m = Math.floor(elapsed / 60).toString().padStart(2, '0');
         const s = (elapsed % 60).toString().padStart(2, '0');
         const timerEl = document.getElementById('exportTimerLabel');
         if (timerEl) timerEl.textContent = `${m}:${s}`;
     }, 1000);
 
-    try {
-        console.table(questions.map(q => ({
-            name: q.question_name.substring(0, 30),
-            viz_tab: q.viz_tab,
-            both_chart_type: q.both_chart_type,
-            skip: q.skip_analytics
-        })));
+    let userVisibleError = null;
+    let connectionLost = false;
 
-        const response = await fetch('/export_docx_stream', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ questions, session_id: window.sessionId || null }),
-            signal: _exportAbortController.signal
+    try {
+        const response = await fetch(`/export_docx_stream/${taskId}`, {
+            method: 'GET',
+            signal: _exportAbortController.signal,
         });
 
         if (!response.ok) {
-            const data = await response.json();
-            showToast(data.message || 'Ошибка генерации документа', 'danger');
+            if (response.status === 404) {
+                showToast('Задача истекла или не найдена. Запустите экспорт заново.', 'warning');
+                window.exportTask = undefined;
+                if (window._wizardState && window._wizardState.save) window._wizardState.save();
+            } else {
+                showToast('Не удалось подключиться к задаче', 'danger');
+            }
             return;
         }
 
@@ -305,35 +375,54 @@ async function _doExport() {
                     document.body.appendChild(a); a.click();
                     document.body.removeChild(a); URL.revokeObjectURL(fileUrl);
 
-                    // Сохраняем результат для восстановления после refresh.
+                    // Сохраняем результат для refresh-восстановления и закрываем активную задачу.
                     _storeExportResult(msg.file, a.download);
-                    // И сразу показываем баннер «Скачать снова» — пользователь
-                    // увидит подтверждение того, что файл доступен повторно.
                     restoreExportButtons(window.exportResult);
+                    window.exportTask = undefined;
+                    if (window._wizardState && window._wizardState.save) window._wizardState.save();
 
                     showToast('Готово: отчёт скачан', 'success');
                 }
 
                 if (msg.type === 'error') {
-                    showToast(msg.message || 'Ошибка генерации', 'danger');
+                    userVisibleError = msg.message || 'Ошибка генерации';
+                    showToast(userVisibleError, 'danger');
+                    window.exportTask = undefined;
+                    if (window._wizardState && window._wizardState.save) window._wizardState.save();
                 }
             }
         }
     } catch (err) {
         if (err.name === 'AbortError') {
-            showToast('Генерация отчёта остановлена', 'warning');
+
+            window.exportTask = undefined;
+            if (window._wizardState && window._wizardState.save) window._wizardState.save();
         } else {
-            showToast('Ошибка соединения с сервером', 'danger');
+
+            connectionLost = true;
+            showToast('Соединение прервано. Задача продолжается в фоне — обновите страницу, чтобы возобновить.', 'warning');
         }
     } finally {
+        _currentTaskId = null;
         _exportAbortController = null;
         btn.disabled = false;
-        btn.innerHTML = origHtml;
+        btn.innerHTML = _downloadBtnDefaultHtml || 'Скачать .docx';
         if (stopBtn) stopBtn.disabled = true;
         clearInterval(_exportTimerInterval);
-        if (progressContainer) setTimeout(() => progressContainer.classList.add('d-none'), 2000);
+        if (progressContainer && !connectionLost) {
+            setTimeout(() => progressContainer.classList.add('d-none'), 2000);
+        }
     }
 }
+
+
+
+function resumeExportTask(taskId) {
+    if (!taskId) return;
+    if (_currentTaskId === taskId) return;   
+}
+
+window.resumeExportTask = resumeExportTask;
 
 document.getElementById('downloadApiBtn').addEventListener('click', () => {
     _doExport();

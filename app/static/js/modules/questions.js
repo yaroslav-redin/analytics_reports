@@ -348,16 +348,8 @@ document.getElementById('sortableQuestionsList').addEventListener('click', (e) =
 });
 
 
-// ===================== REHYDRATE (этап 4) =====================
-// Перерисовка шага 3 после refresh: восстанавливает выпадашку выбора файла,
-// список доступных вопросов и сортируемый список выбранных — БЕЗ затирания
-// сохранённого questionMapping (в отличие от addQuestionToSortable, который
-// внутри вызывает autoMapQuestion и переписывает mapping заново).
 
 function _buildSortableItemFromMapping(qName) {
-    // Создаёт DOM-элемент сортируемого вопроса, используя текущий
-    // window.questionMapping[qName] (а не auto-detect). Если в mapping
-    // что-то отсутствует — рисует значок «missing».
     const sortableContainer = document.getElementById('sortableQuestionsList');
     if (Array.from(sortableContainer.querySelectorAll('.question-item'))
         .some(el => el.getAttribute('data-col') === qName)) return;
@@ -410,8 +402,7 @@ function rehydrateQuestionsUI() {
         fileSelectContainer.style.display = 'none';
     }
 
-    // 2) Сортируемый список выбранных вопросов — из questionMapping,
-    //    но БЕЗ авто-маппинга поверх (mapping уже восстановлен).
+
     const sortableContainer = document.getElementById('sortableQuestionsList');
     sortableContainer.innerHTML = '<div class="p-3 text-center text-muted" id="emptySortablePlaceholder"><i class="fa-solid fa-hand-pointer me-1"></i>Выберите вопросы на шаге 3, чтобы они появились здесь</div>';
 
@@ -419,13 +410,11 @@ function rehydrateQuestionsUI() {
         _buildSortableItemFromMapping(qName);
     });
 
-    // 3) Список доступных вопросов для текущего файла. _renderQuestionsForFile
-    //    сам учитывает текущее содержимое sortable-списка (через selectedQNames),
-    //    поэтому чекбоксы выставляются автоматически.
+
     fileSelect.value = '0';
     _renderQuestionsForFile(0);
 
-    // 4) Sortable.js на свежем контейнере.
+
     if (typeof Sortable !== 'undefined') {
         new Sortable(sortableContainer, {
             handle: '.drag-handle', animation: 150, ghostClass: 'sortable-ghost',

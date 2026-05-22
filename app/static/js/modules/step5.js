@@ -5,14 +5,6 @@ window.pieChartsData = {};
 window.renderedTabs = {};
 
 
-// ===================== РЕНДЕР РЕЗУЛЬТАТОВ АНАЛИЗА (модульный уровень) =====================
-// Эти функции переиспользуются в двух режимах:
-//   1) Свежий /analyze — renderAnalysisResults(items, sections) создаёт appData
-//      с дефолтами и рисует DOM.
-//   2) Восстановление после refresh — rehydrateAnalysisResults() работает с уже
-//      существующим window.appData (со всеми правками пользователя) и только
-//      перерисовывает DOM.
-
 function _newAppDataEntry(item, visualize) {
     // Свежая appData-запись с дефолтными настройками.
     return {
@@ -65,8 +57,7 @@ function _buildReportSectionCard(secId, secName, secColor, isCollapsed) {
 }
 
 function _buildFullItemDOM(id, entry, container) {
-    // Полная карточка вопроса с вкладками (Таблица/Столбчатая/Накопленная/Круговая/Оба).
-    // Предполагает, что window.appData[id] === entry уже задан.
+
 
     window.renderedTabs[id] = { bar: false, stacked: false, pie: false, both: false };
     window.chartsData[id] = true;
@@ -178,9 +169,7 @@ function _buildSimpleItemDOM(id, entry, container) {
 }
 
 function _renderAllResultsFromAppData() {
-    // Рисует весь #reportContent из текущего window.appData.
-    // Используется и при свежем /analyze (после заполнения appData),
-    // и при рехидрации (appData уже восстановлен).
+
 
     const reportContent = document.getElementById('reportContent');
     if (!reportContent) return;
@@ -576,9 +565,7 @@ document.addEventListener('click', e => {
         });
     }
 
-    // Каждое переключение вкладки перерисовывает её содержимое из актуальных
-    // window.appData[id] — без этого правки, сделанные на одной вкладке, не
-    // видны при возврате на другую (DOM остаётся «застывшим» с прошлого рендера).
+
     if (tab === 'table') {
         renderTable(id);
     }
@@ -599,8 +586,6 @@ document.addEventListener('click', e => {
         const dataObj = window.appData[id];
         if (dataObj) {
             const bothTableId = `both_table_${id}`;
-            // АЛИАС, не deep-copy: правки в both-таблице должны менять источник,
-            // иначе диаграмма на той же вкладке не увидит изменений.
             window.appData[bothTableId] = dataObj;
             const lastTab = dataObj._lastChartTab || 'bar';
             setTimeout(() => {

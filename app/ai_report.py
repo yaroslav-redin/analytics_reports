@@ -141,18 +141,13 @@ def group_answers_openrouter(answers: list, question_name: str) -> list[dict]:
 
     answers_str = [str(a) for a in answers]
 
-    # 1) Дедуп с сохранением порядка первого появления.
     unique_answers = list(dict.fromkeys(answers_str))
 
-    # 2) Кэш.
     cache_key = _grouping_cache_key(unique_answers, question_name)
     with _grouping_cache_lock:
         cached = _grouping_cache.get(cache_key)
     if cached is not None:
         print(f"[group_answers] CACHE HIT ({len(unique_answers)} уникальных)")
-        # Пересобираем группы под фактический список answers, чтобы members совпадали
-        # с исходным набором (в кэше canonical→members уже учитывают весь список,
-        # но answers могли прийти в другом порядке/частоте — пересобираем).
         norm_map = {}
         for grp in cached:
             for m in grp["members"]:
@@ -173,13 +168,10 @@ def group_answers_openrouter(answers: list, question_name: str) -> list[dict]:
         f"параллельно до {cfg.get_int('llm_group_max_concurrency')}"
     )
 
-    # 4) Параллельные вызовы (для 1 батча ThreadPoolExecutor тоже корректно работает).
     norm_map = _normalize_in_parallel(batches, question_name)
 
-    # 5) Сборка групп — на ПОЛНОМ исходном списке (с дубликатами).
     groups = _build_groups_from_norm_map(answers_str, norm_map)
 
-    # 6) Сохраняем в кэш.
     with _grouping_cache_lock:
         _grouping_cache[cache_key] = groups
 

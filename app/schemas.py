@@ -42,15 +42,15 @@ class ExportQuestion(BaseModel):
     file_totals: Dict[str, int]
     show_total: bool
     section: Optional[SectionInfo] = None
-    viz_tab: Optional[str] = None        # 'table' | 'bar' | 'stacked' | 'pie' | None
-    chart_direction: str = 'y'           # 'y' = column, 'x' = horizontal bar
+    viz_tab: Optional[str] = None        
+    chart_direction: str = 'y'           
     show_legend: bool = True
-    hidden_col: str = 'none'             # 'none' | 'count' | 'percent'
+    hidden_col: str = 'none'             
     skip_analytics: bool = False
     both_chart_type: str = 'bar'
-    pie_colors: List[str] = []        # цвет каждой активной строки для круговой
-    bar_colors: List[str] = []        # цвет каждой активной строки для столбчатой (single-file)
-    file_colors: Dict[str, str] = {}  # цвет каждого файла (multi-file: bar/stacked)
+    pie_colors: List[str] = []       
+    bar_colors: List[str] = []       
+    file_colors: Dict[str, str] = {}  
 
 class ExportDocxRequest(BaseModel):
     questions: List[ExportQuestion]

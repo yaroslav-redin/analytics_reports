@@ -589,15 +589,7 @@ function drawChartOnCanvas(sourceId, canvasId, colorEditorId) {
 }
 
 
-/**
- * Если переданный id принадлежит таблице на вкладке «Таблица + диаграмма»
- * (формат `both_table_<sourceId>`), перерисовывает соответствующую диаграмму
- * на той же вкладке. Все остальные id игнорирует.
- *
- * Нужен потому, что drawChart/drawStackedChart/drawPieChart ищут canvas по
- * `canvas_<id>`, а для both-таблицы такого canvas нет — диаграмма живёт на
- * отдельном canvas `both_canvas_<sourceId>` и рисуется через drawChartForBoth.
- */
+
 function _refreshBothChartIfNeeded(targetId) {
     if (typeof targetId !== 'string' || !targetId.startsWith('both_table_')) return;
     const sourceId = targetId.slice('both_table_'.length);

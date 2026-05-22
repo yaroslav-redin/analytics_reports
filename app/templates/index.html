@@ -5,11 +5,6 @@
 (function(){var t=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-bs-theme',t);})();
 </script>
 <script>
-// До первого рендера body: если в sessionStorage есть прогресс мастера выше
-// шага 1 — добавляем html.wizard-restoring, чтобы CSS скрыл .wizard-track.
-// Снимается классом из restoreState() в state.js после полной регидрации.
-// Safety: всё равно снимаем через 3 сек, если по какой-то причине JS-инит
-// не дойдёт до конца — иначе пользователь увидит пустой экран.
 (function () {
     try {
         var raw = sessionStorage.getItem('wizardState.v1');
@@ -31,7 +26,7 @@
                 document.documentElement.classList.remove('wizard-restoring');
             }, 3000);
         }
-    } catch (e) { /* sessionStorage недоступен — не страшно, просто не прячем */ }
+    } catch (e) {  }
 })();
 </script>
     <meta charset="UTF-8">

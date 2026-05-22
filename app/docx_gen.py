@@ -404,8 +404,7 @@ def _call_llm(prompt: str, system: str = "", max_tokens: int | None = None) -> s
 
 # ===================== ПАРАЛЛЕЛЬНАЯ ГЕНЕРАЦИЯ ТЕКСТОВ =====================
 
-# Максимум одновременных запросов к OpenRouter. Для free-tier 3 — безопасный
-# потолок: больше — будет много 429.
+
 _MAX_CONCURRENCY = 3
 
 
@@ -431,7 +430,6 @@ def _generate_texts_parallel(
             results[idx] = {"text": None, "skipped": True, "error": False}
             return
 
-        # Защитный no-op: если когда-нибудь добавим skip_analytics — будет работать.
         if q.get("skip_analytics", False):
             results[idx] = {"text": None, "skipped": True, "error": False}
             return
@@ -440,7 +438,6 @@ def _generate_texts_parallel(
         sec_name = sec.get("name") if sec else ""
         sec_description = sec.get("description", "") if sec else ""
 
-        # Проверка кэша до захвата семафора — кэш-хиты не блокируют слоты.
         key = _cache_key(q, sec_name, sec_description)
         with _analysis_cache_lock:
             cached = _analysis_cache.get(key)
@@ -469,7 +466,7 @@ def _generate_texts_parallel(
                     }
                     print(f"  [{idx + 1}/{total}] ERROR: {e}")
 
-        # Обновляем прогресс по мере фактического завершения (а не по порядку).
+
         with counter_lock:
             done_counter["n"] += 1
             done_now = done_counter["n"]
@@ -488,7 +485,7 @@ def _generate_texts_parallel(
     for t in threads:
         t.join()
 
-    # На всякий случай: если какой-то слот остался None (теоретически невозможно).
+
     for i, r in enumerate(results):
         if r is None:
             results[i] = {"text": None, "skipped": True, "error": False}
@@ -848,16 +845,12 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
     table_counter = [1]
     part_counter = [1]
 
-    # 0) Титульный лист — если хотя бы одно из полей в настройках заполнено.
     title_rendered = _render_title_page(doc)
     if title_rendered:
         doc.add_page_break()
 
-    # 1) Группировка вопросов по разделам в порядке появления.
     section_groups = _group_questions_by_section(questions)
 
-    # 2) Отбираем разделы, для которых нужны выводы (есть имя раздела и
-    #    хотя бы один вопрос). Сохраняем порядок появления.
     sections_for_conclusion = [
         {
             "name":        sec.get("name", ""),
@@ -868,7 +861,7 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
         if sec and sec.get("name") and qs
     ]
     total_conclusions = len(sections_for_conclusion)
-    total_final = 1 if questions else 0  # один LLM-вызов на финальные выводы
+    total_final = 1 if questions else 0  
 
     print(
         f"Параллельная генерация {total_questions} вопросов, "
@@ -879,19 +872,13 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
 
     grand_total = total_questions + total_conclusions + total_final
 
-    # 3) Параллельно генерируем все тексты вопросов.
     texts = _generate_texts_parallel(
         questions,
         cancel_event=cancel_event,
         progress_callback=progress_callback,
-        # шкала прогресса единая на весь экспорт: N вопросов + M выводов
         progress_total=grand_total,
     )
 
-    # 4) Параллельно: выводы по разделам и финальные выводы. Оба этапа не
-    #    зависят от текстов вопросов и не зависят друг от друга — запускаем
-    #    одновременно в двух потоках. Внутренние пулы делят rate-лимит через
-    #    общий _pace() / _LAST_REQUEST_TIME, так что 429 нам не грозят.
     conclusions: list[dict] = []
     final_result: dict | None = None
 
@@ -924,13 +911,10 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
     t_sec.join()
     t_fin.join()
 
-    # Сопоставляем сгенерированные выводы их разделам через имя раздела
-    # (имена в пределах отчёта считаем уникальными, как и в текущей сборке).
     conclusion_by_section_name: dict[str, dict] = {}
     for sec_def, res in zip(sections_for_conclusion, conclusions):
         conclusion_by_section_name[sec_def["name"]] = res
 
-    # 5) Сборка документа: проходим по группам в исходном порядке.
     is_first_section_written = True
     for group_idx, (sec, qs_in_group) in enumerate(section_groups):
         if cancel_event and cancel_event.is_set():
@@ -939,7 +923,6 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
         sec_name = sec.get("name") if sec else ""
         sec_description = sec.get("description", "") if sec else ""
 
-        # Заголовок раздела (только для именованных разделов).
         if sec_name:
             if not is_first_section_written:
                 doc.add_page_break()
@@ -952,11 +935,9 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
                 _p(doc, sec_description, size=14, space_after=6)
             is_first_section_written = False
 
-        # Вопросы раздела.
         for q in qs_in_group:
             if cancel_event and cancel_event.is_set():
                 break
-            # индекс вопроса в исходном списке — для попадания в texts
             q_idx = questions.index(q)
             result = texts[q_idx] or {}
             if not result.get("skipped") and result.get("text"):
@@ -966,7 +947,6 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
 
             insert_visualization(doc, q, chart_counter, table_counter, part_counter)
 
-        # Выводы раздела — только для именованных разделов.
         if sec_name and sec_name in conclusion_by_section_name:
             conc = conclusion_by_section_name[sec_name]
             if conc and not conc.get("skipped") and conc.get("text"):
@@ -980,7 +960,6 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
                 for para_text in [p.strip() for p in conc["text"].split("\n\n") if p.strip()]:
                     _p(doc, para_text, bold=bold_text, size=14, space_after=6)
 
-    # 6) ИТОГОВЫЕ ВЫВОДЫ — отдельная последняя страница.
     if (
         final_result
         and not final_result.get("skipped")
