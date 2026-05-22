@@ -114,14 +114,13 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
             window.pieChartsData = {};
             window.renderedTabs = {};
             window._collapsedReportSections = new Set();
+            window._renderedItems = [];
 
-            let tableCounter = 1;
-            let figureCounter = 1;
             let globalItemIdx = 0;
 
             const renderItemFull = (item, container) => {
                 const id = `item_${globalItemIdx++}`;
-                window.renderedTabs[id] = { bar: false, stacked: false, pie: false };
+                window.renderedTabs[id] = { bar: false, stacked: false, pie: false, both: false };
                 window.chartsData[id] = true;
                 window.stackedChartsData[id] = true;
                 window.pieChartsData[id] = true;
@@ -129,7 +128,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                 window.appData[id] = {
                     question_name: item.col_name,
                     visualize: true,
-                    options: { showTotal: true, highlightTop: false, topN: 1, chartDirection: 'y', highlightColor: '#dc3545', hiddenCol: 'none', tableVertical: false, showLegend: item.file_keys.length > 1 },
+                    options: { showTotal: true, highlightTop: false, topN: 1, chartDirection: 'y', highlightColor: '#dc3545', hiddenCol: 'none', tableVertical: false, showLegend: item.file_keys.length > 1, skipAnalytics: false },
                     headers: { h1: "Ответ", h2: "Кол-во ответивших", h3: "% от числа ответивших" },
                     data: item.data,
                     file_keys: item.file_keys,
@@ -138,11 +137,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                     pieColors: [...PIE_COLORS],
                     barColors: [...PIE_COLORS]
                 };
-                const tNum = tableCounter++;
-                const fNumBar = figureCounter++;
-                const fNumStacked = figureCounter++;
-                const fNumPie = figureCounter;
-                figureCounter += item.file_keys.length;
+                window._renderedItems.push({ id, name: item.col_name });
 
                 const el = _tpl('tpl-full-result-item');
 
@@ -184,20 +179,14 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                 settings.querySelector('.full-item-fuzzy-btn').dataset.id = id;
 
                 el.querySelector('.full-item-pane-table').id = `pane_table_${id}`;
-                el.querySelector('.full-item-table-caption').textContent =
-                    `Таблица ${tNum} – Распределение ответов респондентов на вопрос: «${item.col_name}»`;
                 el.querySelector('.full-item-table').id = id;
 
                 el.querySelector('.full-item-pane-bar').id = `pane_bar_${id}`;
                 el.querySelector('.full-item-bar-color-editor').id = `bar_color_editor_${id}`;
                 el.querySelector('.full-item-bar-canvas').id = `canvas_${id}`;
-                el.querySelector('.full-item-bar-caption').textContent =
-                    `Рисунок ${fNumBar} – Распределение ответов респондентов на вопрос: «${item.col_name}»`;
 
                 el.querySelector('.full-item-pane-stacked').id = `pane_stacked_${id}`;
                 el.querySelector('.full-item-stacked-canvas').id = `stacked_canvas_${id}`;
-                el.querySelector('.full-item-stacked-caption').textContent =
-                    `Рисунок ${fNumStacked} – Распределение ответов респондентов на вопрос: «${item.col_name}»`;
 
                 el.querySelector('.full-item-pane-pie').id = `pane_pie_${id}`;
                 el.querySelector('.full-item-pie-color-editor').id = `pie_color_editor_${id}`;
@@ -211,8 +200,11 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                     pieCanvases.appendChild(pc);
                 });
 
-                el.querySelector('.full-item-pie-caption').textContent =
-                    `Рисунок ${fNumPie} – Распределение ответов респондентов на вопрос: «${item.col_name}»`;
+                el.querySelector('.full-item-pane-both').id = `pane_both_${id}`;
+                const bothTable = el.querySelector('.full-item-both-table');
+                bothTable.id = `both_table_${id}`;
+                el.querySelector('.full-item-both-bar-color-editor').id = `both_bar_color_editor_${id}`;
+                el.querySelector('.full-item-both-bar-canvas').id = `both_canvas_${id}`;
 
                 settings.querySelectorAll('[data-vis-tabs]').forEach(settEl => {
                     settEl.classList.toggle('d-none', !settEl.dataset.visTabs.split(' ').includes('table'));
@@ -227,7 +219,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                 window.appData[id] = {
                     question_name: item.col_name,
                     visualize: false,
-                    options: { showTotal: true, highlightTop: false, topN: 1, chartDirection: 'y', highlightColor: '#dc3545', hiddenCol: 'none', tableVertical: false, showLegend: false },
+                    options: { showTotal: true, highlightTop: false, topN: 1, chartDirection: 'y', highlightColor: '#dc3545', hiddenCol: 'none', tableVertical: false, showLegend: false, skipAnalytics: false },
                     headers: { h1: "Ответ", h2: "Кол-во ответивших", h3: "% от числа ответивших" },
                     data: item.data,
                     file_keys: item.file_keys,
@@ -320,6 +312,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
                 unassignedItems.forEach(item => renderItemSimple(item, unassignedBody));
             }
 
+            _recomputeCaptions();
             updateStep6Btn();
         } else { showToast(data.message, 'danger'); }
     } catch (err) { showToast('Ошибка соединения с сервером', 'danger'); }
@@ -328,6 +321,45 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
         document.getElementById('analyzeSpinner').classList.add('d-none');
     }
 });
+
+// Подписи «Таблица N» и «Рисунок N» зависят от активной вкладки каждого вопроса.
+function _recomputeCaptions() {
+    let tNum = 1;
+    let fNum = 1;
+    (window._renderedItems || []).forEach(({ id, name }) => {
+        const tabsEl = document.getElementById(`tabs_${id}`);
+        if (!tabsEl) return;
+        const activeBtn = tabsEl.querySelector('.viz-tab-btn.active');
+        const activeTab = activeBtn ? activeBtn.dataset.tab : 'table';
+        const wrapper = tabsEl.closest('.full-item-wrapper');
+        if (!wrapper) return;
+
+        let myT = null, myF = null;
+        if (activeTab === 'table') {
+            myT = tNum++;
+        } else if (activeTab === 'both') {
+            myT = tNum++;
+            myF = fNum++;
+        } else {
+            myF = fNum++;
+        }
+
+        const tableCap = myT ? `Таблица ${myT} – Распределение ответов респондентов на вопрос: «${name}»` : '';
+        const figCap   = myF ? `Рисунок ${myF} – Распределение ответов респондентов на вопрос: «${name}»` : '';
+
+        const _set = (sel, txt) => {
+            const el = wrapper.querySelector(sel);
+            if (el) el.textContent = txt;
+        };
+        _set('.full-item-table-caption', tableCap);
+        _set('.full-item-bar-caption', figCap);
+        _set('.full-item-stacked-caption', figCap);
+        _set('.full-item-pie-caption', figCap);
+        _set('.full-item-both-table-caption', tableCap);
+        _set('.full-item-both-bar-caption', figCap);
+    });
+}
+window._recomputeCaptions = _recomputeCaptions;
 
 // ===================== VIZ INTERACTION HANDLERS =====================
 document.addEventListener('click', e => {
@@ -399,15 +431,55 @@ document.addEventListener('click', e => {
     const simpleFuzzyBtn = e.target.closest('.simple-item-fuzzy-btn');
     if (simpleFuzzyBtn) { confirmFuzzyMapping(simpleFuzzyBtn.dataset.id); return; }
 
+    const skipBtn = e.target.closest('.full-item-skip-analytics-btn');
+    if (skipBtn) {
+        const wrapper = skipBtn.closest('.full-item-wrapper');
+        if (!wrapper) return;
+        const collapseBtn = wrapper.querySelector('.full-item-collapse-btn');
+        const id = collapseBtn?.dataset?.id;
+        if (!id || !window.appData[id]) return;
+        const nowSkipped = !window.appData[id].options.skipAnalytics;
+        window.appData[id].options.skipAnalytics = nowSkipped;
+        skipBtn.classList.toggle('btn-outline-secondary', !nowSkipped);
+        skipBtn.classList.toggle('btn-danger', nowSkipped);
+        skipBtn.title = nowSkipped
+            ? 'Аналитика отключена — нажмите чтобы включить'
+            : 'Не генерировать аналитику для этого вопроса';
+        return;
+    }
+
+    const simpleSkipBtn = e.target.closest('.simple-item-skip-analytics-btn');
+    if (simpleSkipBtn) {
+        const body = simpleSkipBtn.closest('.simple-item-body');
+        if (!body) return;
+        const table = body.querySelector('table[id]');
+        const id = table?.id;
+        if (!id || !window.appData[id]) return;
+        const nowSkipped = !window.appData[id].options.skipAnalytics;
+        window.appData[id].options.skipAnalytics = nowSkipped;
+        simpleSkipBtn.classList.toggle('btn-outline-secondary', !nowSkipped);
+        simpleSkipBtn.classList.toggle('btn-danger', nowSkipped);
+        simpleSkipBtn.title = nowSkipped
+            ? 'Аналитика отключена — нажмите чтобы включить'
+            : 'Не генерировать аналитику для этого вопроса';
+        return;
+    }
+
     const btn = e.target.closest('.viz-tab-btn');
     if (!btn) return;
     const id = btn.dataset.id;
     const tab = btn.dataset.tab;
 
+    if (tab !== 'table' && tab !== 'both') {
+        if (window.appData[id]) {
+            window.appData[id]._lastChartTab = tab;
+        }
+    }
+
     document.querySelectorAll(`#tabs_${id} .viz-tab-btn`).forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
 
-    ['table', 'bar', 'stacked', 'pie'].forEach(t => {
+    ['table', 'bar', 'stacked', 'pie', 'both'].forEach(t => {
         const pane = document.getElementById(`pane_${t}_${id}`);
         if (pane) pane.classList.toggle('d-none', t !== tab);
     });
@@ -432,4 +504,19 @@ document.addEventListener('click', e => {
         window.renderedTabs[id].pie = true;
         setTimeout(() => drawPieChart(id), 50);
     }
+    if (tab === 'both') {
+        window.renderedTabs[id].both = true;
+        const dataObj = window.appData[id];
+        if (dataObj) {
+            const bothTableId = `both_table_${id}`;
+            window.appData[bothTableId] = JSON.parse(JSON.stringify(dataObj));
+            const lastTab = dataObj._lastChartTab || 'bar';
+            setTimeout(() => {
+                renderTable(bothTableId);
+                drawChartForBoth(id, lastTab);
+            }, 50);
+        }
+    }
+
+    if (window._recomputeCaptions) window._recomputeCaptions();
 });
