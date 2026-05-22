@@ -1,6 +1,7 @@
 import io
 import time
 import random
+import re
 import json
 import hashlib
 import threading
@@ -8,6 +9,9 @@ from openai import OpenAI
 from docx import Document
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
+from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from app.chart_gen import insert_visualization
 from app import config as cfg
 
@@ -111,6 +115,135 @@ def _make_doc():
     doc.styles["Normal"].font.name = "Times New Roman"
     doc.styles["Normal"].font.size = Pt(14)
     return doc
+
+
+# ===================== ТИТУЛЬНЫЙ ЛИСТ =====================
+
+def _p_inline_bold(doc, line: str, size: int = 14,
+                   space_before: int = 0, space_after: int = 0,
+                   center: bool = False, first_line_indent: bool = True):
+    """
+    Рендерит одну строку как абзац с поддержкой инлайн-разметки **bold**.
+    Используется для рендера тела титульного листа: ключи вроде
+    «**Основание для проведения исследования** – …» получают жирный фрагмент.
+    """
+    para = doc.add_paragraph()
+    para.paragraph_format.space_before = Pt(space_before)
+    para.paragraph_format.space_after = Pt(space_after)
+    para.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
+    para.alignment = WD_ALIGN_PARAGRAPH.CENTER if center else WD_ALIGN_PARAGRAPH.JUSTIFY
+    if first_line_indent:
+        para.paragraph_format.first_line_indent = Cm(1.25)
+
+    # **bold** парсится через re.split: чётные сегменты — обычные, нечётные — жирные.
+    parts = re.split(r"\*\*(.+?)\*\*", line)
+    for i, part in enumerate(parts):
+        if not part:
+            continue
+        run = para.add_run(part)
+        run.bold = (i % 2 == 1)
+        run.font.name = "Times New Roman"
+        run.font.size = Pt(size)
+    return para
+
+
+def _render_approval_stamp(doc, approval_text: str):
+    """
+    Рендерит гриф «УТВЕРЖДАЮ» как 1×1 таблицу справа без границ.
+    Каждая строка из approval_text — отдельный абзац внутри ячейки, без отступа
+    первой строки, выровнен по центру внутри ячейки.
+    """
+    lines = [ln.rstrip() for ln in approval_text.splitlines() if ln.strip()]
+    if not lines:
+        return
+
+    table = doc.add_table(rows=1, cols=1)
+    table.alignment = WD_TABLE_ALIGNMENT.RIGHT
+    table.autofit = False
+    table.columns[0].width = Cm(8.5)
+
+    # Снимаем границы.
+    tbl = table._element
+    tblPr = tbl.find(qn("w:tblPr"))
+    if tblPr is None:
+        tblPr = OxmlElement("w:tblPr")
+        tbl.insert(0, tblPr)
+    tblBorders = OxmlElement("w:tblBorders")
+    for side in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        b = OxmlElement(f"w:{side}")
+        b.set(qn("w:val"), "nil")
+        tblBorders.append(b)
+    tblPr.append(tblBorders)
+
+    cell = table.cell(0, 0)
+    cell.width = Cm(8.5)
+
+    for i, line in enumerate(lines):
+        para = cell.paragraphs[0] if i == 0 else cell.add_paragraph()
+        para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        para.paragraph_format.space_before = Pt(0)
+        para.paragraph_format.space_after = Pt(0)
+        para.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
+        para.paragraph_format.first_line_indent = Cm(0)
+        run = para.add_run(line)
+        run.font.name = "Times New Roman"
+        run.font.size = Pt(14)
+        # Шапка-«УТВЕРЖДАЮ» (первая строка) обычно идёт жирным.
+        run.bold = (i == 0)
+
+
+def _render_title_body(doc, body_text: str):
+    """
+    Рендерит тело титульного листа с minimal markdown:
+      • строка «# заголовок» → центрированный жирный заголовок (без отступа красной строки);
+      • прочие непустые строки → обычные justified-абзацы с поддержкой **bold**;
+      • пустые строки — пропускаются (разделение абзацев и так получается естественно).
+    """
+    if not body_text or not body_text.strip():
+        return
+
+    for raw_line in body_text.splitlines():
+        line = raw_line.rstrip()
+        if not line.strip():
+            continue
+
+        if line.lstrip().startswith("# "):
+            heading = line.lstrip()[2:].strip()
+            _p_inline_bold(
+                doc, f"**{heading}**",
+                size=14,
+                space_before=18, space_after=18,
+                center=True, first_line_indent=False,
+            )
+        else:
+            _p_inline_bold(doc, line, size=14, space_after=4)
+
+
+def _render_title_page(doc) -> bool:
+    """
+    Рисует титульный лист в начале документа на основе настроек:
+      • cfg.title_page_approval — гриф «УТВЕРЖДАЮ» (плашка справа);
+      • cfg.title_page_body     — заголовок отчёта + вводный текст + реквизиты.
+    Возвращает True, если что-то было нарисовано (тогда вызывающий код
+    добавит page-break перед основным содержимым).
+    Если оба поля пустые — титульный лист не создаётся.
+    """
+    approval = (cfg.get("title_page_approval") or "").strip()
+    body = (cfg.get("title_page_body") or "").strip()
+    if not approval and not body:
+        return False
+
+    if approval:
+        _render_approval_stamp(doc, approval)
+        # Небольшой воздушный отступ после плашки перед заголовком отчёта.
+        spacer = doc.add_paragraph()
+        spacer.paragraph_format.space_before = Pt(0)
+        spacer.paragraph_format.space_after = Pt(0)
+
+    if body:
+        _render_title_body(doc, body)
+
+    return True
 
 
 # ===================== ДАННЫЕ (файл 1) =====================
@@ -714,6 +847,11 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
     chart_counter = [1]
     table_counter = [1]
     part_counter = [1]
+
+    # 0) Титульный лист — если хотя бы одно из полей в настройках заполнено.
+    title_rendered = _render_title_page(doc)
+    if title_rendered:
+        doc.add_page_break()
 
     # 1) Группировка вопросов по разделам в порядке появления.
     section_groups = _group_questions_by_section(questions)

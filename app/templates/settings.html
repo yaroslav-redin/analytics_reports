@@ -35,6 +35,7 @@
         <div class="col-12 col-md-3">
             <ul class="nav nav-pills flex-column gap-1" id="settingsTabs">
                 <li class="nav-item"><a class="nav-link active" href="#" data-tab="llm"><i class="fa-solid fa-robot me-2"></i>LLM и API</a></li>
+                <li class="nav-item"><a class="nav-link" href="#" data-tab="title"><i class="fa-solid fa-id-card me-2"></i>Титульный лист</a></li>
                 <li class="nav-item"><a class="nav-link" href="#" data-tab="prompts"><i class="fa-solid fa-file-lines me-2"></i>Промпты — анализ</a></li>
                 <li class="nav-item"><a class="nav-link" href="#" data-tab="conclusions"><i class="fa-solid fa-flag-checkered me-2"></i>Промпт — выводы разделов</a></li>
                 <li class="nav-item"><a class="nav-link" href="#" data-tab="final"><i class="fa-solid fa-medal me-2"></i>Промпт — итоговые выводы</a></li>
@@ -91,6 +92,39 @@
                                 <label class="settings-label">Задержка между запросами (сек)</label>
                                 <input type="number" class="form-control form-control-sm" id="s_llm_sleep_between_calls" min="0" max="120" step="1">
                                 <div class="settings-hint">Пауза между вызовами LLM при генерации отчёта</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Титульный лист -->
+                <div class="tab-pane d-none" data-pane="title">
+                    <div class="card settings-card">
+                        <div class="card-body">
+                            <h6 class="fw-semibold mb-3">Титульный лист</h6>
+                            <div class="alert alert-info py-2 small">
+                                Вставляется в самое начало аналитического отчёта на отдельной странице.
+                                Гриф «УТВЕРЖДАЮ» — отдельной плашкой в правом верхнем углу (1×1 таблица без границ).
+                                Тело — заголовок, вводный текст и реквизиты исследования.
+                                Если оба поля очистить — титульный лист не создаётся.
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="settings-label">Гриф утверждения (плашка справа)</label>
+                                <textarea class="form-control form-control-sm font-monospace" id="s_title_page_approval" rows="6"></textarea>
+                                <div class="settings-hint">Каждая строка — отдельный абзац внутри плашки, центрирован. Первая строка («УТВЕРЖДАЮ») идёт жирным.</div>
+                            </div>
+
+                            <div class="mb-1">
+                                <label class="settings-label">Тело титульного листа</label>
+                                <textarea class="form-control form-control-sm font-monospace" id="s_title_page_body" rows="22"></textarea>
+                                <div class="settings-hint">
+                                    Синтаксис разметки:
+                                    <code># Заголовок</code> — центрированный жирный заголовок;
+                                    <code>**текст**</code> внутри строки — жирный фрагмент (например, ключи «<code>**Цель исследования**</code> – …»);
+                                    пустые строки разделяют абзацы.
+                                    Поля документа уже выставлены по ГОСТ: 2/2/3/1,5 см.
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -362,6 +396,9 @@ async function loadSettings() {
     document.getElementById('s_llm_max_tokens_grouping').value = s.llm_max_tokens_grouping || '';
     document.getElementById('s_llm_sleep_between_calls').value = s.llm_sleep_between_calls || '';
 
+    document.getElementById('s_title_page_approval').value = s.title_page_approval || '';
+    document.getElementById('s_title_page_body').value     = s.title_page_body || '';
+
     document.getElementById('s_prompt_system_role').value = s.prompt_system_role || '';
     document.getElementById('s_prompt_writing_rules').value = s.prompt_writing_rules || '';
     document.getElementById('s_prompt_style_example').value = s.prompt_style_example || '';
@@ -404,6 +441,8 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
         llm_max_tokens_analysis:  document.getElementById('s_llm_max_tokens_analysis').value,
         llm_max_tokens_grouping:  document.getElementById('s_llm_max_tokens_grouping').value,
         llm_sleep_between_calls:  document.getElementById('s_llm_sleep_between_calls').value,
+        title_page_approval:      document.getElementById('s_title_page_approval').value,
+        title_page_body:          document.getElementById('s_title_page_body').value,
         prompt_system_role:       document.getElementById('s_prompt_system_role').value,
         prompt_writing_rules:     document.getElementById('s_prompt_writing_rules').value,
         prompt_style_example:     document.getElementById('s_prompt_style_example').value,
