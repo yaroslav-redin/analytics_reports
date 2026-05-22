@@ -545,6 +545,142 @@ def _generate_section_conclusions_parallel(
     return results  # type: ignore[return-value]
 
 
+# ===================== ИТОГОВЫЕ ВЫВОДЫ ПО ОПРОСУ =====================
+
+_final_conclusion_cache: dict[str, str] = {}
+_final_conclusion_cache_lock = threading.Lock()
+
+
+def _final_conclusion_cache_key(questions: list[dict]) -> str:
+    payload = json.dumps(
+        {
+            "qs": [
+                {
+                    "q":    q.get("question_name"),
+                    "rows": q.get("rows"),
+                    "sec":  (q.get("section") or {}).get("name") if q.get("section") else None,
+                }
+                for q in questions
+            ],
+            "model": cfg.get("openrouter_model"),
+            "sys":   hashlib.md5(cfg.get("prompt_final_conclusion_system").encode()).hexdigest(),
+            "rules": hashlib.md5(cfg.get("prompt_final_conclusion_rules").encode()).hexdigest(),
+            "ex":    hashlib.md5(cfg.get("prompt_final_conclusion_example").encode()).hexdigest(),
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.md5(payload.encode("utf-8")).hexdigest()
+
+
+def _build_final_conclusion_prompt(questions: list[dict]) -> tuple[str, str]:
+    """
+    Собирает system + user-промпт для итоговых выводов по всему опросу.
+    В user-блок попадают все вопросы со статистикой ответов, сгруппированные по разделам,
+    в исходном порядке появления.
+    """
+    system_prompt = cfg.get("prompt_final_conclusion_system")
+
+    lines = [
+        "Ниже — пример желаемого стиля одного из итоговых выводов:",
+        cfg.get("prompt_final_conclusion_example"),
+        "",
+        "ПРАВИЛА НАПИСАНИЯ ИТОГОВЫХ ВЫВОДОВ:",
+        cfg.get("prompt_final_conclusion_rules"),
+        "",
+        "Ниже — все вопросы опроса со статистикой ответов, "
+        "сгруппированные по разделам. Сформулируй на их основе итоговые выводы.",
+        "",
+    ]
+
+    # Группировка вопросов по разделам — для лучшей читаемости моделью.
+    current_sec_name: str | None | object = "__SENTINEL__"
+    for q in questions:
+        sec = q.get("section")
+        sec_name = sec.get("name") if sec else None
+
+        if sec_name != current_sec_name:
+            current_sec_name = sec_name
+            lines.append("")
+            if sec_name:
+                lines.append(f"## Раздел: «{sec_name}»")
+                desc = (sec or {}).get("description") or ""
+                if desc:
+                    lines.append(f"Описание раздела: {desc}")
+            else:
+                lines.append("## Вопросы вне разделов")
+            lines.append("")
+
+        lines.append(f"— Вопрос: «{q.get('question_name', '')}»")
+        for row in q.get("rows", []):
+            parts = []
+            for fk in q.get("file_keys", []):
+                label = q.get("file_labels", {}).get(fk, fk)
+                count = row["counts"].get(fk, 0)
+                total = q.get("file_totals", {}).get(fk, 0)
+                pct = round(count / total * 100, 1) if total > 0 else 0
+                parts.append(f"{label}: {count} ({pct}%)")
+            lines.append(f"    {row.get('answer', '')}: {'; '.join(parts)}")
+        lines.append("")
+
+    lines += [
+        "Напиши итоговые выводы: РОВНО 4–5 связных абзацев по 5–6 предложений каждый, "
+        "разделённых пустой строкой. Без общего заголовка, без нумерации выводов, "
+        "без маркеров списка. Обязательно укажи, что респонденты предлагают ВВЕСТИ "
+        "или развивать в работе университета и от чего предлагают ОТКАЗАТЬСЯ.",
+    ]
+
+    return system_prompt, "\n".join(lines)
+
+
+def _generate_final_conclusion(
+    questions: list[dict],
+    cancel_event=None,
+    progress_callback=None,
+    progress_offset: int = 0,
+    progress_total: int | None = None,
+) -> dict:
+    """Один LLM-вызов на финальные выводы. Кэшируется в памяти процесса."""
+    if cancel_event and cancel_event.is_set():
+        return {"text": None, "skipped": True, "error": False}
+
+    key = _final_conclusion_cache_key(questions)
+    with _final_conclusion_cache_lock:
+        cached = _final_conclusion_cache.get(key)
+
+    if cached is not None:
+        print("  [FINAL CACHE] Итоговые выводы")
+        result = {"text": cached, "skipped": False, "error": False}
+    else:
+        try:
+            sys_p, usr_p = _build_final_conclusion_prompt(questions)
+            text = _call_llm(
+                usr_p,
+                system=sys_p,
+                max_tokens=cfg.get_int("llm_max_tokens_final_conclusion"),
+            )
+            with _final_conclusion_cache_lock:
+                _final_conclusion_cache[key] = text
+            result = {"text": text, "skipped": False, "error": False}
+            print("  [FINAL OK] Итоговые выводы")
+        except Exception as e:
+            result = {
+                "text": f"Ошибка генерации итоговых выводов: {e}",
+                "skipped": False,
+                "error": True,
+            }
+            print(f"  [FINAL ERROR] {e}")
+
+    if progress_callback and progress_total:
+        try:
+            progress_callback(progress_offset + 1, progress_total, "Итоговые выводы")
+        except Exception:
+            pass
+
+    return result
+
+
 # ===================== АНАЛИТИКА (файл 2) =====================
 
 def _group_questions_by_section(questions: list) -> list[tuple[dict | None, list[dict]]]:
@@ -594,14 +730,16 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
         if sec and sec.get("name") and qs
     ]
     total_conclusions = len(sections_for_conclusion)
+    total_final = 1 if questions else 0  # один LLM-вызов на финальные выводы
 
     print(
-        f"Параллельная генерация {total_questions} вопросов и "
-        f"{total_conclusions} выводов по разделам "
+        f"Параллельная генерация {total_questions} вопросов, "
+        f"{total_conclusions} выводов по разделам и "
+        f"{total_final} итогового вывода "
         f"(до {_MAX_CONCURRENCY} потоков)..."
     )
 
-    grand_total = total_questions + total_conclusions
+    grand_total = total_questions + total_conclusions + total_final
 
     # 3) Параллельно генерируем все тексты вопросов.
     texts = _generate_texts_parallel(
@@ -612,17 +750,41 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
         progress_total=grand_total,
     )
 
-    # 4) Параллельно генерируем выводы по всем подходящим разделам.
-    if sections_for_conclusion and not (cancel_event and cancel_event.is_set()):
-        conclusions = _generate_section_conclusions_parallel(
-            sections_for_conclusion,
-            cancel_event=cancel_event,
-            progress_callback=progress_callback,
-            progress_offset=total_questions,
-            progress_total=grand_total,
-        )
-    else:
-        conclusions = []
+    # 4) Параллельно: выводы по разделам и финальные выводы. Оба этапа не
+    #    зависят от текстов вопросов и не зависят друг от друга — запускаем
+    #    одновременно в двух потоках. Внутренние пулы делят rate-лимит через
+    #    общий _pace() / _LAST_REQUEST_TIME, так что 429 нам не грозят.
+    conclusions: list[dict] = []
+    final_result: dict | None = None
+
+    def _run_section_conclusions():
+        nonlocal conclusions
+        if sections_for_conclusion and not (cancel_event and cancel_event.is_set()):
+            conclusions = _generate_section_conclusions_parallel(
+                sections_for_conclusion,
+                cancel_event=cancel_event,
+                progress_callback=progress_callback,
+                progress_offset=total_questions,
+                progress_total=grand_total,
+            )
+
+    def _run_final_conclusion():
+        nonlocal final_result
+        if total_final and not (cancel_event and cancel_event.is_set()):
+            final_result = _generate_final_conclusion(
+                questions,
+                cancel_event=cancel_event,
+                progress_callback=progress_callback,
+                progress_offset=total_questions + total_conclusions,
+                progress_total=grand_total,
+            )
+
+    t_sec = threading.Thread(target=_run_section_conclusions, daemon=True)
+    t_fin = threading.Thread(target=_run_final_conclusion, daemon=True)
+    t_sec.start()
+    t_fin.start()
+    t_sec.join()
+    t_fin.join()
 
     # Сопоставляем сгенерированные выводы их разделам через имя раздела
     # (имена в пределах отчёта считаем уникальными, как и в текущей сборке).
@@ -679,6 +841,24 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
                 bold_text = bool(conc.get("error"))
                 for para_text in [p.strip() for p in conc["text"].split("\n\n") if p.strip()]:
                     _p(doc, para_text, bold=bold_text, size=14, space_after=6)
+
+    # 6) ИТОГОВЫЕ ВЫВОДЫ — отдельная последняя страница.
+    if (
+        final_result
+        and not final_result.get("skipped")
+        and final_result.get("text")
+        and not (cancel_event and cancel_event.is_set())
+    ):
+        doc.add_page_break()
+        _p(
+            doc, "Итоговые выводы по результатам опроса",
+            bold=True, size=14,
+            space_before=0, space_after=14,
+            center=True, first_line_indent=False,
+        )
+        bold_err = bool(final_result.get("error"))
+        for para_text in [p.strip() for p in final_result["text"].split("\n\n") if p.strip()]:
+            _p(doc, para_text, bold=bold_err, size=14, space_after=8)
 
     buf = io.BytesIO()
     doc.save(buf)
