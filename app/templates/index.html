@@ -4,6 +4,36 @@
 <script>
 (function(){var t=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-bs-theme',t);})();
 </script>
+<script>
+// До первого рендера body: если в sessionStorage есть прогресс мастера выше
+// шага 1 — добавляем html.wizard-restoring, чтобы CSS скрыл .wizard-track.
+// Снимается классом из restoreState() в state.js после полной регидрации.
+// Safety: всё равно снимаем через 3 сек, если по какой-то причине JS-инит
+// не дойдёт до конца — иначе пользователь увидит пустой экран.
+(function () {
+    try {
+        var raw = sessionStorage.getItem('wizardState.v1');
+        var target = 0;
+        var m = (window.location.hash || '').match(/^#step(\d+)$/);
+        if (m) {
+            var n = parseInt(m[1], 10) - 1;
+            if (n > 0 && n < 6) target = n;
+        }
+        if (target === 0 && raw) {
+            var s = JSON.parse(raw);
+            if (s && typeof s.currentStep === 'number' && s.currentStep > 0 && s.currentStep < 6) {
+                target = s.currentStep;
+            }
+        }
+        if (target > 0) {
+            document.documentElement.classList.add('wizard-restoring');
+            setTimeout(function () {
+                document.documentElement.classList.remove('wizard-restoring');
+            }, 3000);
+        }
+    } catch (e) { /* sessionStorage недоступен — не страшно, просто не прячем */ }
+})();
+</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title }}</title>
@@ -46,6 +76,7 @@
     <script src="{{ url_for('static', path='js/transliteration.min.js') }}"></script>
     <script src="{{ url_for('static', path='js/countries.js') }}"></script>
     <script src="{{ url_for('static', path='js/modules/utils.js') }}"></script>
+    <script src="{{ url_for('static', path='js/modules/state.js') }}"></script>
     <script src="{{ url_for('static', path='js/modules/wizard.js') }}"></script>
     <script src="{{ url_for('static', path='js/modules/upload.js') }}"></script>
     <script src="{{ url_for('static', path='js/modules/sheets.js') }}"></script>

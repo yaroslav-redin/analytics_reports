@@ -48,6 +48,13 @@ html { height: 100%; }
     transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
     will-change: transform;
 }
+/* На время восстановления после refresh скрываем трек, чтобы пользователь
+   не видел step 0 до того, как JS позиционирует визард на нужный шаг.
+   Класс ставится inline-скриптом в <head> ДО первого рендера body и
+   снимается в restoreState() после всей регидрации. */
+html.wizard-restoring .wizard-track {
+    visibility: hidden;
+}
 .wizard-step {
     flex: 0 0 100%;
     width: 100%;

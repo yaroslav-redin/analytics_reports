@@ -2,6 +2,81 @@
 
 let _exportAbortController = null;
 
+// ── Сохранение и восстановление результата экспорта ─────────────────────────
+
+function _storeExportResult(b64, filename) {
+    // Сохраняем base64 готового .docx в window.exportResult, чтобы после
+    // refresh страницы пользователь мог скачать файл повторно без перегенерации.
+    window.exportResult = {
+        file: b64,
+        filename: filename || 'report_analysis.docx',
+        generatedAt: Date.now(),
+    };
+    // Форсируем сохранение в sessionStorage сразу — без 1.5с throttle.
+    // Если файл слишком большой и не влезет — state.js гарантирует, что
+    // лёгкие ключи всё равно будут сохранены без HEAVY (без exportResult).
+    if (window._wizardState && typeof window._wizardState.save === 'function') {
+        window._wizardState.save();
+    }
+}
+
+function _downloadExportResult(exportResult) {
+    if (!exportResult || !exportResult.file) return;
+    const bytes = Uint8Array.from(atob(exportResult.file), c => c.charCodeAt(0));
+    const blob = new Blob([bytes], {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = exportResult.filename || 'report_analysis.docx';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+function restoreExportButtons(exportResult) {
+    // На refresh шага 6: если сохранён готовый .docx — показываем баннер с
+    // кнопкой «Скачать снова» в начале шага. Возвращает true, если что-то нарисовали.
+    if (!exportResult || !exportResult.file) return false;
+
+    const step6Container = document.getElementById('wizardStep5');   // 0-индекс: шаг 6 = wizardStep5
+    if (!step6Container) return false;
+
+    // Удаляем старый баннер, если был.
+    const old = document.getElementById('exportRestoreBanner');
+    if (old) old.remove();
+
+    const when = exportResult.generatedAt ? new Date(exportResult.generatedAt) : new Date();
+    const timeStr = when.toLocaleString('ru-RU', {
+        hour: '2-digit', minute: '2-digit',
+        day: '2-digit', month: '2-digit', year: 'numeric',
+    });
+
+    const banner = document.createElement('div');
+    banner.id = 'exportRestoreBanner';
+    banner.className = 'alert alert-success d-flex align-items-center gap-2 mt-3 mb-3';
+    banner.innerHTML = `
+        <i class="fa-solid fa-circle-check fs-5"></i>
+        <div class="flex-grow-1">
+            <div class="fw-medium">Отчёт уже сгенерирован (${timeStr})</div>
+            <div class="small text-muted">${exportResult.filename || 'report_analysis.docx'}</div>
+        </div>
+        <button type="button" class="btn btn-sm btn-success" id="exportRedownloadBtn">
+            <i class="fa-solid fa-download me-1"></i>Скачать снова
+        </button>
+    `;
+
+    // Вставляем баннер в начало контейнера шага 6.
+    step6Container.insertBefore(banner, step6Container.firstChild);
+
+    const btn = document.getElementById('exportRedownloadBtn');
+    if (btn) btn.addEventListener('click', () => _downloadExportResult(exportResult));
+
+    return true;
+}
+
+window.restoreExportButtons = restoreExportButtons;
+
 // Цвета хранятся индексами по активным строкам (отсортированным по _total desc).
 // Срезаем по количеству активных строк, чтобы не отправлять лишние.
 function _collectColorsForActive(dataObj, colorsArr) {
@@ -229,6 +304,12 @@ async function _doExport() {
                     a.download = customName ? customName.replace(/\.docx$/i, '') + '.docx' : (msg.filename || 'report_analysis.docx');
                     document.body.appendChild(a); a.click();
                     document.body.removeChild(a); URL.revokeObjectURL(fileUrl);
+
+                    // Сохраняем результат для восстановления после refresh.
+                    _storeExportResult(msg.file, a.download);
+                    // И сразу показываем баннер «Скачать снова» — пользователь
+                    // увидит подтверждение того, что файл доступен повторно.
+                    restoreExportButtons(window.exportResult);
 
                     showToast('Готово: отчёт скачан', 'success');
                 }

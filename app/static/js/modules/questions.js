@@ -346,3 +346,96 @@ document.getElementById('sortableQuestionsList').addEventListener('click', (e) =
     const btn = e.target.closest('.mapping-btn');
     if (btn) openMappingModal(btn.dataset.qname);
 });
+
+
+// ===================== REHYDRATE (этап 4) =====================
+// Перерисовка шага 3 после refresh: восстанавливает выпадашку выбора файла,
+// список доступных вопросов и сортируемый список выбранных — БЕЗ затирания
+// сохранённого questionMapping (в отличие от addQuestionToSortable, который
+// внутри вызывает autoMapQuestion и переписывает mapping заново).
+
+function _buildSortableItemFromMapping(qName) {
+    // Создаёт DOM-элемент сортируемого вопроса, используя текущий
+    // window.questionMapping[qName] (а не auto-detect). Если в mapping
+    // что-то отсутствует — рисует значок «missing».
+    const sortableContainer = document.getElementById('sortableQuestionsList');
+    if (Array.from(sortableContainer.querySelectorAll('.question-item'))
+        .some(el => el.getAttribute('data-col') === qName)) return;
+
+    const item = _tpl('tpl-sortable-q-item');
+    item.dataset.col = qName;
+    const labelSpan = item.querySelector('.q-label-span');
+    labelSpan.textContent = qName;
+    labelSpan.title = qName;
+
+    const qMapping = (window.questionMapping || {})[qName] || {};
+    const missingIn = (window.processedFiles || [])
+        .filter(f => !qMapping[f.clean_filename])
+        .map(f => f.original_name);
+
+    if (missingIn.length > 0) {
+        const warn = _tpl('tpl-missing-warning');
+        warn.dataset.bsToggle = 'tooltip';
+        warn.title = `Вопрос не найден в: ${missingIn.join(', ')}`;
+        item.appendChild(warn);
+    }
+
+    if (window.processedFiles && window.processedFiles.length > 1) {
+        const mapBtn = _tpl('tpl-sortable-mapping-btn');
+        mapBtn.dataset.qname = qName;
+        item.appendChild(mapBtn);
+    }
+
+    sortableContainer.appendChild(item);
+}
+
+function rehydrateQuestionsUI() {
+    if (!window.processedFiles || !window.processedFiles.length) return false;
+
+    // 1) Выпадашка выбора исходного файла.
+    const fileSelect = document.getElementById('fileSelectStep3');
+    const fileSelectContainer = document.getElementById('fileSelectContainer');
+    if (window.processedFiles.length > 1) {
+        if (window.jQuery && $(fileSelect).hasClass('select2-hidden-accessible')) {
+            $(fileSelect).select2('destroy');
+        }
+        fileSelect.innerHTML = window.processedFiles.map((f, i) =>
+            `<option value="${i}">${f.original_name}</option>`
+        ).join('');
+        if (fileSelectContainer) fileSelectContainer.style.display = '';
+        if (window.jQuery) {
+            $(fileSelect).select2({ theme: 'bootstrap-5', width: '100%', language: 'ru' });
+        }
+    } else if (fileSelectContainer) {
+        fileSelectContainer.style.display = 'none';
+    }
+
+    // 2) Сортируемый список выбранных вопросов — из questionMapping,
+    //    но БЕЗ авто-маппинга поверх (mapping уже восстановлен).
+    const sortableContainer = document.getElementById('sortableQuestionsList');
+    sortableContainer.innerHTML = '<div class="p-3 text-center text-muted" id="emptySortablePlaceholder"><i class="fa-solid fa-hand-pointer me-1"></i>Выберите вопросы на шаге 3, чтобы они появились здесь</div>';
+
+    Object.keys(window.questionMapping || {}).forEach(qName => {
+        _buildSortableItemFromMapping(qName);
+    });
+
+    // 3) Список доступных вопросов для текущего файла. _renderQuestionsForFile
+    //    сам учитывает текущее содержимое sortable-списка (через selectedQNames),
+    //    поэтому чекбоксы выставляются автоматически.
+    fileSelect.value = '0';
+    _renderQuestionsForFile(0);
+
+    // 4) Sortable.js на свежем контейнере.
+    if (typeof Sortable !== 'undefined') {
+        new Sortable(sortableContainer, {
+            handle: '.drag-handle', animation: 150, ghostClass: 'sortable-ghost',
+        });
+    }
+
+    if (typeof checkEmptyPlaceholder === 'function') checkEmptyPlaceholder();
+    if (typeof initTooltips === 'function') initTooltips();
+    if (typeof updateQuestionsBtn === 'function') updateQuestionsBtn();
+    return true;
+}
+
+window.rehydrateQuestionsUI = rehydrateQuestionsUI;

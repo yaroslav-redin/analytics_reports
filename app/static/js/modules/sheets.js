@@ -10,6 +10,11 @@ document.getElementById('sheetForm').addEventListener('submit', async (e) => {
         }
     });
 
+    // Сохраняем выбранные листы для последующей регидрации на refresh.
+    // processedFiles не несёт информации о том, какие именно листы были выбраны,
+    // поэтому без этого после refresh чекбоксы пришлось бы выставлять "наобум".
+    window.sheetSelections = Object.fromEntries(filesPayload.map(f => [f.filename, f.sheets]));
+
     document.getElementById('processSheetsBtn').disabled = true;
     document.getElementById('sheetSpinner').classList.remove('d-none');
 
@@ -49,6 +54,48 @@ document.getElementById('sheetCheckboxesContainer').addEventListener('change', (
         updateSheetBtn();
     }
 });
+
+// ===================== REHYDRATE (этап 4) =====================
+// Перерисовывает чекбоксы листов после refresh, опираясь на сохранённые
+// window.uploadedFiles и window.sheetSelections.
+
+function rehydrateSheetsUI() {
+    if (!window.uploadedFiles || !window.uploadedFiles.length) return false;
+    const container = document.getElementById('sheetCheckboxesContainer');
+    if (!container) return false;
+
+    const selections = window.sheetSelections || {};
+
+    container.innerHTML = '';
+    window.uploadedFiles.forEach((file, fIdx) => {
+        container.insertAdjacentHTML('beforeend',
+            `<div class="file-section-title">Файл ${fIdx + 1}: ${file.original_name}</div>`);
+        file.sheets.forEach(sheet => {
+            // Если есть сохранённый выбор — используем его; иначе fallback на
+            // дефолтную логику «один лист → отметить автоматически».
+            const savedForFile = selections[file.filename];
+            const wasSelected = Array.isArray(savedForFile)
+                ? savedForFile.includes(sheet)
+                : file.sheets.length === 1;
+            const checkedAttr = wasSelected ? ' checked' : '';
+            container.insertAdjacentHTML('beforeend', `
+                <div class="form-check ms-3">
+                    <input class="form-check-input sheet-checkbox" type="checkbox" value="${sheet}" data-filename="${file.filename}" id="s_${fIdx}_${sheet}"${checkedAttr}>
+                    <label class="form-check-label" for="s_${fIdx}_${sheet}">${sheet}</label>
+                </div>`);
+        });
+    });
+
+    const totalSheets = document.querySelectorAll('.sheet-checkbox').length;
+    const checkedSheets = document.querySelectorAll('.sheet-checkbox:checked').length;
+    const selectAll = document.getElementById('selectAllSheets');
+    if (selectAll) selectAll.checked = (totalSheets === checkedSheets && totalSheets > 0);
+    if (typeof updateSheetBtn === 'function') updateSheetBtn();
+    return true;
+}
+
+window.rehydrateSheetsUI = rehydrateSheetsUI;
+
 
 // ===================== LEGEND SETTINGS =====================
 function renderLegendSettings() {

@@ -4,6 +4,297 @@ window.stackedChartsData = {};
 window.pieChartsData = {};
 window.renderedTabs = {};
 
+
+// ===================== РЕНДЕР РЕЗУЛЬТАТОВ АНАЛИЗА (модульный уровень) =====================
+// Эти функции переиспользуются в двух режимах:
+//   1) Свежий /analyze — renderAnalysisResults(items, sections) создаёт appData
+//      с дефолтами и рисует DOM.
+//   2) Восстановление после refresh — rehydrateAnalysisResults() работает с уже
+//      существующим window.appData (со всеми правками пользователя) и только
+//      перерисовывает DOM.
+
+function _newAppDataEntry(item, visualize) {
+    // Свежая appData-запись с дефолтными настройками.
+    return {
+        question_name: item.col_name,
+        visualize: visualize,
+        options: {
+            showTotal:       true,
+            highlightTop:    false,
+            topN:            1,
+            chartDirection:  'y',
+            highlightColor:  '#dc3545',
+            hiddenCol:       'none',
+            tableVertical:   false,
+            showLegend:      visualize && item.file_keys.length > 1,
+            skipAnalytics:   false,
+        },
+        headers: { h1: "Ответ", h2: "Кол-во ответивших", h3: "% от числа ответивших" },
+        data:        item.data,
+        file_keys:   item.file_keys,
+        file_labels: item.file_labels,
+        file_colors: item.file_colors,
+        pieColors:   [...PIE_COLORS],
+        barColors:   [...PIE_COLORS],
+    };
+}
+
+function _buildReportSectionCard(secId, secName, secColor, isCollapsed) {
+    const card = _tpl('tpl-report-section-card');
+    card.style.borderLeft = `3px solid ${secColor}`;
+    card.style.paddingLeft = '8px';
+
+    card.querySelector('.report-section-icon').style.color = secColor;
+
+    const nameSpan = card.querySelector('.report-section-name');
+    nameSpan.textContent = secName;
+    nameSpan.style.color = secColor;
+
+    const collapseBtn = card.querySelector('.report-section-collapse-btn');
+    collapseBtn.dataset.sectionId = secId;
+    collapseBtn.title = isCollapsed ? 'Развернуть' : 'Свернуть';
+    collapseBtn.querySelector('i').className = `fa-solid ${isCollapsed ? 'fa-chevron-up' : 'fa-chevron-down'}`;
+
+    const wrapper = card.querySelector('.report-section-wrapper');
+    wrapper.dataset.sectionId = secId;
+    if (isCollapsed) wrapper.classList.add('collapsed');
+
+    card.querySelector('.report-section-body').id = `rsc_${secId}`;
+
+    return card;
+}
+
+function _buildFullItemDOM(id, entry, container) {
+    // Полная карточка вопроса с вкладками (Таблица/Столбчатая/Накопленная/Круговая/Оба).
+    // Предполагает, что window.appData[id] === entry уже задан.
+
+    window.renderedTabs[id] = { bar: false, stacked: false, pie: false, both: false };
+    window.chartsData[id] = true;
+    window.stackedChartsData[id] = true;
+    window.pieChartsData[id] = true;
+    window._renderedItems.push({ id, name: entry.question_name });
+
+    const el = _tpl('tpl-full-result-item');
+
+    const titleSpan = el.querySelector('.full-item-title');
+    titleSpan.textContent = entry.question_name;
+    titleSpan.title = entry.question_name;
+
+    el.querySelector('.full-item-collapse-btn').dataset.id = id;
+    el.querySelector('.full-item-body').id = `full_body_${id}`;
+
+    const tabsUl = el.querySelector('.full-item-tabs');
+    tabsUl.id = `tabs_${id}`;
+    tabsUl.querySelectorAll('.viz-tab-btn').forEach(btn => btn.dataset.id = id);
+
+    const settings = el.querySelector('.full-item-settings');
+    settings.id = `settings_${id}`;
+
+    const _setInputId = (sel, uid) => {
+        const inp = settings.querySelector(sel);
+        inp.id = uid;
+        inp.dataset.id = id;
+        const lbl = inp.nextElementSibling;
+        if (lbl && lbl.tagName === 'LABEL') lbl.htmlFor = uid;
+        return inp;
+    };
+    const totalInput  = _setInputId('.setting-show-total',     `total_${id}`);
+    const hlInput     = _setInputId('.setting-highlight-top',  `hl_${id}`);
+    const tvertInput  = _setInputId('.setting-table-vertical', `tvert_${id}`);
+    const cvertInput  = _setInputId('.setting-chart-vertical', `cvert_${id}`);
+    const legendInput = _setInputId('.setting-show-legend',    `legend_${id}`);
+
+    // Восстанавливаем состояния чекбоксов из entry.options (для рехидрации это важно).
+    totalInput.checked  = entry.options.showTotal !== false;
+    hlInput.checked     = !!entry.options.highlightTop;
+    tvertInput.checked  = !!entry.options.tableVertical;
+    cvertInput.checked  = entry.options.chartDirection === 'x';
+    legendInput.checked = entry.options.showLegend !== false && entry.file_keys.length > 1;
+
+    const topNInput = settings.querySelector('.setting-top-n');
+    topNInput.dataset.id = id;
+    topNInput.max = entry.data.length * entry.file_keys.length;
+    topNInput.value = entry.options.topN || 1;
+
+    const hlColorInput = settings.querySelector('.setting-highlight-color');
+    hlColorInput.dataset.id = id;
+    hlColorInput.value = entry.options.highlightColor || '#dc3545';
+
+    settings.querySelector('.random-highlight-color-btn').dataset.id = id;
+    settings.querySelector('.full-item-hide-col-btn').dataset.id     = id;
+    settings.querySelector('.full-item-edit-btn').dataset.id         = id;
+    settings.querySelector('.full-item-fuzzy-btn').dataset.id        = id;
+
+    el.querySelector('.full-item-pane-table').id = `pane_table_${id}`;
+    el.querySelector('.full-item-table').id      = id;
+
+    el.querySelector('.full-item-pane-bar').id            = `pane_bar_${id}`;
+    el.querySelector('.full-item-bar-color-editor').id    = `bar_color_editor_${id}`;
+    el.querySelector('.full-item-bar-canvas').id          = `canvas_${id}`;
+
+    el.querySelector('.full-item-pane-stacked').id        = `pane_stacked_${id}`;
+    el.querySelector('.full-item-stacked-canvas').id      = `stacked_canvas_${id}`;
+
+    el.querySelector('.full-item-pane-pie').id            = `pane_pie_${id}`;
+    el.querySelector('.full-item-pie-color-editor').id    = `pie_color_editor_${id}`;
+
+    const pieCanvases = el.querySelector('.full-item-pie-canvases');
+    entry.file_keys.forEach((fk, fi) => {
+        const pc = _tpl('tpl-pie-canvas-item');
+        pc.querySelector('.pie-file-label').textContent = entry.file_labels[fk];
+        pc.querySelector('.pie-canvas-el').id = `pie_canvas_${id}_${fi}`;
+        pc.querySelector('.pie-msg-el').id    = `pie_msg_${id}_${fi}`;
+        pieCanvases.appendChild(pc);
+    });
+
+    el.querySelector('.full-item-pane-both').id = `pane_both_${id}`;
+    const bothTable = el.querySelector('.full-item-both-table');
+    bothTable.id = `both_table_${id}`;
+    el.querySelector('.full-item-both-bar-color-editor').id = `both_bar_color_editor_${id}`;
+    el.querySelector('.full-item-both-bar-canvas').id       = `both_canvas_${id}`;
+
+    settings.querySelectorAll('[data-vis-tabs]').forEach(settEl => {
+        settEl.classList.toggle('d-none', !settEl.dataset.visTabs.split(' ').includes('table'));
+    });
+
+    container.appendChild(el);
+    renderTable(id);
+}
+
+function _buildSimpleItemDOM(id, entry, container) {
+    const el = _tpl('tpl-simple-result-item');
+
+    const titleSpan = el.querySelector('.simple-item-title');
+    titleSpan.textContent = entry.question_name;
+    titleSpan.title = entry.question_name;
+
+    el.querySelector('.simple-item-collapse-btn').dataset.id = id;
+    el.querySelector('.simple-item-body').id                 = `simple_body_${id}`;
+    el.querySelector('.simple-item-fuzzy-btn').dataset.id    = id;
+    el.querySelector('.simple-item-table').id                = id;
+
+    container.appendChild(el);
+    renderTable(id);
+}
+
+function _renderAllResultsFromAppData() {
+    // Рисует весь #reportContent из текущего window.appData.
+    // Используется и при свежем /analyze (после заполнения appData),
+    // и при рехидрации (appData уже восстановлен).
+
+    const reportContent = document.getElementById('reportContent');
+    if (!reportContent) return;
+    reportContent.innerHTML = '';
+
+    // Сбрасываем DOM-связанные коллекции, но НЕ appData.
+    window.chartsData = {};
+    window.stackedChartsData = {};
+    window.pieChartsData = {};
+    window.renderedTabs = {};
+    window._renderedItems = [];
+    if (!(window._collapsedReportSections instanceof Set)) {
+        window._collapsedReportSections = new Set();
+    }
+    window.charts = window.charts || {};
+
+    // qName → id (пропускаем both_table_* алиасы).
+    const nameToId = {};
+    for (const id of Object.keys(window.appData)) {
+        if (id.startsWith('both_table_')) continue;
+        const e = window.appData[id];
+        if (e && e.question_name) nameToId[e.question_name] = id;
+    }
+
+    const sections = window.reportSections || [];
+    const assignedIds = new Set();
+
+    sections.forEach(sec => {
+        if (!sec.questions || sec.questions.length === 0) return;
+        const rscCollapsed = window._collapsedReportSections.has(sec.id);
+        const secColor = sec.color || '#a0bce5';
+        const card = _buildReportSectionCard(sec.id, sec.name, secColor, rscCollapsed);
+        reportContent.appendChild(card);
+
+        const sectionBody = document.getElementById(`rsc_${sec.id}`);
+        sec.questions.forEach(q => {
+            const id = nameToId[q.qName];
+            if (!id || !sectionBody) return;
+            assignedIds.add(id);
+            const entry = window.appData[id];
+            if (entry.visualize) _buildFullItemDOM(id, entry, sectionBody);
+            else                 _buildSimpleItemDOM(id, entry, sectionBody);
+        });
+    });
+
+    // Нераспределённые
+    const unassignedIds = Object.keys(nameToId)
+        .map(qN => nameToId[qN])
+        .filter(id => !assignedIds.has(id));
+
+    if (unassignedIds.length) {
+        const uaCollapsed = window._collapsedReportSections.has('unassigned');
+        const card = _buildReportSectionCard('unassigned', 'Без раздела', '#6c757d', uaCollapsed);
+        reportContent.appendChild(card);
+        const unassignedBody = document.getElementById('rsc_unassigned');
+        unassignedIds.forEach(id => {
+            const entry = window.appData[id];
+            _buildSimpleItemDOM(id, entry, unassignedBody);
+        });
+    }
+
+    _recomputeCaptions();
+    updateStep6Btn();
+}
+
+function renderAnalysisResults(items, sections) {
+    // Свежий /analyze: пересоздаём appData с дефолтами по items, затем рисуем DOM.
+    window.appData = {};
+
+    const resultsByName = {};
+    items.forEach(item => { if (item && item.col_name) resultsByName[item.col_name] = item; });
+
+    const vizQNames = new Set();
+    (sections || []).forEach(sec => {
+        sec.questions.forEach(q => { if (q.visualize) vizQNames.add(q.qName); });
+    });
+
+    let idx = 0;
+
+    // Сначала элементы из разделов (в порядке появления).
+    (sections || []).forEach(sec => {
+        sec.questions.forEach(q => {
+            const item = resultsByName[q.qName];
+            if (!item) return;
+            const id = `item_${idx++}`;
+            window.appData[id] = _newAppDataEntry(item, vizQNames.has(q.qName));
+        });
+    });
+
+    // Затем «без раздела».
+    const assignedQNames = new Set((sections || []).flatMap(s => s.questions.map(q => q.qName)));
+    items.forEach(item => {
+        if (assignedQNames.has(item.col_name)) return;
+        const id = `item_${idx++}`;
+        window.appData[id] = _newAppDataEntry(item, false);
+    });
+
+    // Сброс UI-состояний перед свежей сборкой.
+    window._collapsedReportSections = new Set();
+
+    _renderAllResultsFromAppData();
+}
+
+function rehydrateAnalysisResults() {
+    // appData уже восстановлен из sessionStorage — просто перерисуем DOM.
+    if (!window.appData || Object.keys(window.appData).length === 0) return false;
+    _renderAllResultsFromAppData();
+    return true;
+}
+
+// Делаем доступными для state.js / других модулей.
+window.renderAnalysisResults  = renderAnalysisResults;
+window.rehydrateAnalysisResults = rehydrateAnalysisResults;
+
 // Collapse report sections and simple question items
 document.getElementById('reportContent').addEventListener('click', e => {
     const colBtn = e.target.closest('.report-section-collapse-btn');
@@ -106,215 +397,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
         const data = await response.json();
 
         if (response.ok) {
-            const reportContent = document.getElementById('reportContent');
-            reportContent.innerHTML = '';
-            window.appData = {};
-            window.chartsData = {};
-            window.stackedChartsData = {};
-            window.pieChartsData = {};
-            window.renderedTabs = {};
-            window._collapsedReportSections = new Set();
-            window._renderedItems = [];
-
-            let globalItemIdx = 0;
-
-            const renderItemFull = (item, container) => {
-                const id = `item_${globalItemIdx++}`;
-                window.renderedTabs[id] = { bar: false, stacked: false, pie: false, both: false };
-                window.chartsData[id] = true;
-                window.stackedChartsData[id] = true;
-                window.pieChartsData[id] = true;
-
-                window.appData[id] = {
-                    question_name: item.col_name,
-                    visualize: true,
-                    options: { showTotal: true, highlightTop: false, topN: 1, chartDirection: 'y', highlightColor: '#dc3545', hiddenCol: 'none', tableVertical: false, showLegend: item.file_keys.length > 1, skipAnalytics: false },
-                    headers: { h1: "Ответ", h2: "Кол-во ответивших", h3: "% от числа ответивших" },
-                    data: item.data,
-                    file_keys: item.file_keys,
-                    file_labels: item.file_labels,
-                    file_colors: item.file_colors,
-                    pieColors: [...PIE_COLORS],
-                    barColors: [...PIE_COLORS]
-                };
-                window._renderedItems.push({ id, name: item.col_name });
-
-                const el = _tpl('tpl-full-result-item');
-
-                const titleSpan = el.querySelector('.full-item-title');
-                titleSpan.textContent = item.col_name;
-                titleSpan.title = item.col_name;
-
-                el.querySelector('.full-item-collapse-btn').dataset.id = id;
-                el.querySelector('.full-item-body').id = `full_body_${id}`;
-
-                const tabsUl = el.querySelector('.full-item-tabs');
-                tabsUl.id = `tabs_${id}`;
-                tabsUl.querySelectorAll('.viz-tab-btn').forEach(btn => btn.dataset.id = id);
-
-                const settings = el.querySelector('.full-item-settings');
-                settings.id = `settings_${id}`;
-
-                const _setInputId = (sel, uid) => {
-                    const inp = settings.querySelector(sel);
-                    inp.id = uid;
-                    inp.dataset.id = id;
-                    const lbl = inp.nextElementSibling;
-                    if (lbl && lbl.tagName === 'LABEL') lbl.htmlFor = uid;
-                    return inp;
-                };
-                _setInputId('.setting-show-total', `total_${id}`);
-                _setInputId('.setting-highlight-top', `hl_${id}`);
-                _setInputId('.setting-table-vertical', `tvert_${id}`);
-                _setInputId('.setting-chart-vertical', `cvert_${id}`);
-                const legendInput = _setInputId('.setting-show-legend', `legend_${id}`);
-                legendInput.checked = item.file_keys.length > 1;
-
-                const topNInput = settings.querySelector('.setting-top-n');
-                topNInput.dataset.id = id;
-                topNInput.max = item.data.length * item.file_keys.length;
-                settings.querySelector('.setting-highlight-color').dataset.id = id;
-                settings.querySelector('.random-highlight-color-btn').dataset.id = id;
-                settings.querySelector('.full-item-hide-col-btn').dataset.id = id;
-                settings.querySelector('.full-item-edit-btn').dataset.id = id;
-                settings.querySelector('.full-item-fuzzy-btn').dataset.id = id;
-
-                el.querySelector('.full-item-pane-table').id = `pane_table_${id}`;
-                el.querySelector('.full-item-table').id = id;
-
-                el.querySelector('.full-item-pane-bar').id = `pane_bar_${id}`;
-                el.querySelector('.full-item-bar-color-editor').id = `bar_color_editor_${id}`;
-                el.querySelector('.full-item-bar-canvas').id = `canvas_${id}`;
-
-                el.querySelector('.full-item-pane-stacked').id = `pane_stacked_${id}`;
-                el.querySelector('.full-item-stacked-canvas').id = `stacked_canvas_${id}`;
-
-                el.querySelector('.full-item-pane-pie').id = `pane_pie_${id}`;
-                el.querySelector('.full-item-pie-color-editor').id = `pie_color_editor_${id}`;
-
-                const pieCanvases = el.querySelector('.full-item-pie-canvases');
-                item.file_keys.forEach((fk, fi) => {
-                    const pc = _tpl('tpl-pie-canvas-item');
-                    pc.querySelector('.pie-file-label').textContent = item.file_labels[fk];
-                    pc.querySelector('.pie-canvas-el').id = `pie_canvas_${id}_${fi}`;
-                    pc.querySelector('.pie-msg-el').id = `pie_msg_${id}_${fi}`;
-                    pieCanvases.appendChild(pc);
-                });
-
-                el.querySelector('.full-item-pane-both').id = `pane_both_${id}`;
-                const bothTable = el.querySelector('.full-item-both-table');
-                bothTable.id = `both_table_${id}`;
-                el.querySelector('.full-item-both-bar-color-editor').id = `both_bar_color_editor_${id}`;
-                el.querySelector('.full-item-both-bar-canvas').id = `both_canvas_${id}`;
-
-                settings.querySelectorAll('[data-vis-tabs]').forEach(settEl => {
-                    settEl.classList.toggle('d-none', !settEl.dataset.visTabs.split(' ').includes('table'));
-                });
-
-                container.appendChild(el);
-                renderTable(id);
-            };
-
-            const renderItemSimple = (item, container) => {
-                const id = `item_${globalItemIdx++}`;
-                window.appData[id] = {
-                    question_name: item.col_name,
-                    visualize: false,
-                    options: { showTotal: true, highlightTop: false, topN: 1, chartDirection: 'y', highlightColor: '#dc3545', hiddenCol: 'none', tableVertical: false, showLegend: false, skipAnalytics: false },
-                    headers: { h1: "Ответ", h2: "Кол-во ответивших", h3: "% от числа ответивших" },
-                    data: item.data,
-                    file_keys: item.file_keys,
-                    file_labels: item.file_labels,
-                    file_colors: item.file_colors,
-                    pieColors: [...PIE_COLORS],
-                    barColors: [...PIE_COLORS]
-                };
-
-                const el = _tpl('tpl-simple-result-item');
-
-                const titleSpan = el.querySelector('.simple-item-title');
-                titleSpan.textContent = item.col_name;
-                titleSpan.title = item.col_name;
-
-                el.querySelector('.simple-item-collapse-btn').dataset.id = id;
-                el.querySelector('.simple-item-body').id = `simple_body_${id}`;
-                el.querySelector('.simple-item-fuzzy-btn').dataset.id = id;
-                el.querySelector('.simple-item-table').id = id;
-
-                container.appendChild(el);
-                renderTable(id);
-            };
-
-            const _buildReportSectionCard = (secId, secName, secColor, isCollapsed) => {
-                const card = _tpl('tpl-report-section-card');
-                card.style.borderLeft = `3px solid ${secColor}`;
-                card.style.paddingLeft = '8px';
-
-                card.querySelector('.report-section-icon').style.color = secColor;
-
-                const nameSpan = card.querySelector('.report-section-name');
-                nameSpan.textContent = secName;
-                nameSpan.style.color = secColor;
-
-                const collapseBtn = card.querySelector('.report-section-collapse-btn');
-                collapseBtn.dataset.sectionId = secId;
-                collapseBtn.title = isCollapsed ? 'Развернуть' : 'Свернуть';
-                collapseBtn.querySelector('i').className = `fa-solid ${isCollapsed ? 'fa-chevron-up' : 'fa-chevron-down'}`;
-
-                const wrapper = card.querySelector('.report-section-wrapper');
-                wrapper.dataset.sectionId = secId;
-                if (isCollapsed) wrapper.classList.add('collapsed');
-
-                card.querySelector('.report-section-body').id = `rsc_${secId}`;
-
-                return card;
-            };
-
-            const resultsByName = {};
-            data.results.forEach(item => {
-                if (item && item.col_name) resultsByName[item.col_name] = item;
-            });
-
-            const assignedQNames = new Set((window.reportSections || []).flatMap(s => s.questions.map(q => q.qName)));
-
-            const vizQNames = new Set();
-            (window.reportSections || []).forEach(sec => {
-                sec.questions.forEach(q => { if (q.visualize) vizQNames.add(q.qName); });
-            });
-
-            (window.reportSections || []).forEach(sec => {
-                if (!sec.questions || sec.questions.length === 0) return;
-
-                const rscCollapsed = window._collapsedReportSections && window._collapsedReportSections.has(sec.id);
-                const secColor = sec.color || '#a0bce5';
-                const card = _buildReportSectionCard(sec.id, sec.name, secColor, rscCollapsed);
-                reportContent.appendChild(card);
-
-                const sectionBody = document.getElementById(`rsc_${sec.id}`);
-                sec.questions.forEach(q => {
-                    const item = resultsByName[q.qName];
-                    if (!item || !sectionBody) return;
-                    if (vizQNames.has(q.qName)) renderItemFull(item, sectionBody);
-                    else renderItemSimple(item, sectionBody);
-                });
-            });
-
-            const unassignedItems = configs
-                .filter(cfg => !assignedQNames.has(cfg.column))
-                .map(cfg => resultsByName[cfg.column])
-                .filter(Boolean);
-
-            if (unassignedItems.length) {
-                const uaCollapsed = window._collapsedReportSections && window._collapsedReportSections.has('unassigned');
-                const card = _buildReportSectionCard('unassigned', 'Без раздела', '#6c757d', uaCollapsed);
-                reportContent.appendChild(card);
-
-                const unassignedBody = document.getElementById('rsc_unassigned');
-                unassignedItems.forEach(item => renderItemSimple(item, unassignedBody));
-            }
-
-            _recomputeCaptions();
-            updateStep6Btn();
+            renderAnalysisResults(data.results, window.reportSections);
         } else { showToast(data.message, 'danger'); }
     } catch (err) { showToast('Ошибка соединения с сервером', 'danger'); }
     finally {
