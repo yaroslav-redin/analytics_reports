@@ -55,6 +55,10 @@ html { height: 100%; }
 html.wizard-restoring .wizard-track {
     visibility: hidden;
 }
+.export-progress-hidden {
+    visibility: hidden;
+    min-height: 90px;
+}
 .wizard-step {
     flex: 0 0 100%;
     width: 100%;

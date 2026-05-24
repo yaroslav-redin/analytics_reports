@@ -55,6 +55,8 @@ class ExportQuestion(BaseModel):
 class ExportDocxRequest(BaseModel):
     questions: List[ExportQuestion]
     session_id: Optional[str] = None
+    title_page_body: Optional[str] = None
+    title_page_approval: Optional[str] = None
 
 class AiGroupRequest(BaseModel):
     answers: List[str]

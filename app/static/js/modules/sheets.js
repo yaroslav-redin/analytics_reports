@@ -85,6 +85,19 @@ function rehydrateSheetsUI() {
     const selectAll = document.getElementById('selectAllSheets');
     if (selectAll) selectAll.checked = (totalSheets === checkedSheets && totalSheets > 0);
     if (typeof updateSheetBtn === 'function') updateSheetBtn();
+
+    // Восстанавливаем легенду файлов, используя сохранённые метки/цвета из appData.
+    const savedLabels = {};
+    const savedColors = {};
+    if (window.appData) {
+        const firstEntry = Object.values(window.appData).find(e => e && e.file_labels);
+        if (firstEntry) {
+            Object.assign(savedLabels, firstEntry.file_labels);
+            Object.assign(savedColors, firstEntry.file_colors || {});
+        }
+    }
+    renderLegendSettings(savedLabels, savedColors);
+
     return true;
 }
 
@@ -92,7 +105,7 @@ window.rehydrateSheetsUI = rehydrateSheetsUI;
 
 
 // ===================== LEGEND SETTINGS =====================
-function renderLegendSettings() {
+function renderLegendSettings(savedLabels, savedColors) {
     const block = document.getElementById('legendSettingsBlock');
     const container = document.getElementById('legendInputsContainer');
     if (!window.processedFiles || window.processedFiles.length <= 1) {
@@ -102,16 +115,16 @@ function renderLegendSettings() {
     if (block) block.style.display = '';
     container.innerHTML = '';
     window.processedFiles.forEach((f, i) => {
-        const color = defaultColors[i % defaultColors.length];
+        const defaultColor = defaultColors[i % defaultColors.length];
         const item = _tpl('tpl-legend-item');
         const colorInput = item.querySelector('.legend-color');
         colorInput.dataset.file = f.clean_filename;
-        colorInput.value = color;
+        colorInput.value = (savedColors && savedColors[f.clean_filename]) || defaultColor;
         const btn = item.querySelector('.random-legend-color-btn');
         btn.dataset.file = f.clean_filename;
         const textInput = item.querySelector('.legend-label');
         textInput.dataset.file = f.clean_filename;
-        textInput.value = f.original_name.replace(/\.[^.]+$/, '');
+        textInput.value = (savedLabels && savedLabels[f.clean_filename]) || f.original_name.replace(/\.[^.]+$/, '');
         container.appendChild(item);
     });
 }

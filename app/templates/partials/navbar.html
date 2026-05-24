@@ -17,6 +17,7 @@
                     <i class="fa-solid fa-chevron-down text-white-50" style="font-size:0.65rem;"></i>
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end mt-1">
+                    {% if user.is_admin %}
                     <li>
                         <a class="dropdown-item" href="/settings">
                             <i class="fa-solid fa-gear me-2"></i>Настройки
@@ -28,6 +29,7 @@
                         </a>
                     </li>
                     <li><hr class="dropdown-divider"></li>
+                    {% endif %}
                     <li>
                         <a class="dropdown-item text-danger dropdown-item-logout" href="/auth/logout">
                             <i class="fa-solid fa-right-from-bracket me-2"></i>Выйти

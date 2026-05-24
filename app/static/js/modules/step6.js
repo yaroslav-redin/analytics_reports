@@ -32,8 +32,9 @@ function _downloadExportResult(exportResult) {
 function restoreExportButtons(exportResult) {
     if (!exportResult || !exportResult.file) return false;
 
-    const step6Container = document.getElementById('wizardStep5');   // 0-индекс: шаг 6 = wizardStep5
+    const step6Container = document.getElementById('wizardStep5');
     if (!step6Container) return false;
+    const wizardCard = step6Container.querySelector('.wizard-card') || step6Container;
 
     // Удаляем старый баннер, если был.
     const old = document.getElementById('exportRestoreBanner');
@@ -51,7 +52,7 @@ function restoreExportButtons(exportResult) {
     banner.innerHTML = `
         <i class="fa-solid fa-circle-check fs-5"></i>
         <div class="flex-grow-1">
-            <div class="fw-medium">Отчёт уже сгенерирован (${timeStr})</div>
+            <div class="fw-medium">Отчёт сгенерирован (${timeStr})</div>
             <div class="small text-muted">${exportResult.filename || 'report_analysis.docx'}</div>
         </div>
         <button type="button" class="btn btn-sm btn-success" id="exportRedownloadBtn">
@@ -59,8 +60,7 @@ function restoreExportButtons(exportResult) {
         </button>
     `;
 
-    // Вставляем баннер в начало контейнера шага 6.
-    step6Container.insertBefore(banner, step6Container.firstChild);
+    wizardCard.appendChild(banner);
 
     const btn = document.getElementById('exportRedownloadBtn');
     if (btn) btn.addEventListener('click', () => _downloadExportResult(exportResult));
@@ -251,10 +251,15 @@ async function _doExport() {
             skip: q.skip_analytics
         })));
 
+        const exportBody = { questions, session_id: window.sessionId || null };
+        if (window._titlePageFilled) {
+            exportBody.title_page_body     = window._titlePageFilled.title_page_body;
+            exportBody.title_page_approval = window._titlePageFilled.title_page_approval;
+        }
         const startResp = await fetch('/export_docx_start', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ questions, session_id: window.sessionId || null }),
+            body: JSON.stringify(exportBody),
         });
         if (!startResp.ok) {
             const data = await startResp.json().catch(() => ({}));
@@ -304,7 +309,7 @@ async function _streamExportTask(taskId) {
     const progressText = document.getElementById('exportProgressText');
     const progressLabel = document.getElementById('exportProgressLabel');
     const stopBtn = document.getElementById('exportStopBtn');
-    if (progressContainer) progressContainer.classList.remove('d-none');
+    if (progressContainer) progressContainer.classList.remove('export-progress-hidden');
     if (progressBar) progressBar.style.width = '0%';
     if (progressText) progressText.textContent = '';
     if (progressLabel) progressLabel.textContent = 'Подключение к задаче…';
@@ -410,7 +415,7 @@ async function _streamExportTask(taskId) {
         if (stopBtn) stopBtn.disabled = true;
         clearInterval(_exportTimerInterval);
         if (progressContainer && !connectionLost) {
-            setTimeout(() => progressContainer.classList.add('d-none'), 2000);
+            setTimeout(() => progressContainer.classList.add('export-progress-hidden'), 2000);
         }
     }
 }
@@ -432,3 +437,99 @@ document.getElementById('downloadApiBtn').addEventListener('click', () => {
 document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el, { trigger: 'hover' }));
 
 initTooltips();
+
+// ===================== ТИТУЛЬНЫЙ ЛИСТ =====================
+
+function _parseTitlePlaceholders(text) {
+    const regex = /\[([^\]]+)\]/g;
+    const seen = new Set();
+    const result = [];
+    let m;
+    while ((m = regex.exec(text)) !== null) {
+        if (!seen.has(m[1])) {
+            seen.add(m[1]);
+            result.push(m[1]);
+        }
+    }
+    return result;
+}
+
+function _fillPlaceholders(text, values) {
+    return text.replace(/\[([^\]]+)\]/g, (_, label) =>
+        Object.prototype.hasOwnProperty.call(values, label) ? values[label] : `[${label}]`
+    );
+}
+
+(function () {
+    const openBtn = document.getElementById('titlePageFillBtn');
+    if (!openBtn) return;
+
+    let _titleModal = null;
+
+    openBtn.addEventListener('click', async () => {
+        let settings;
+        try {
+            const resp = await fetch('/api/settings');
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            settings = await resp.json();
+        } catch (e) {
+            showToast('Не удалось загрузить настройки: ' + e.message, 'danger');
+            return;
+        }
+
+        const body     = settings.title_page_body     || '';
+        const approval = settings.title_page_approval || '';
+        const combined = body + '\n' + approval;
+        const placeholders = _parseTitlePlaceholders(combined);
+
+        const container = document.getElementById('titlePageFieldsContainer');
+        if (!container) return;
+
+        const savedValues = window._titlePageFilled?._values || {};
+
+        if (placeholders.length === 0) {
+            container.innerHTML = '<p class="text-muted">В шаблоне титульного листа нет полей для заполнения (текст в квадратных скобках не найден).</p>';
+        } else {
+            container.innerHTML = placeholders.map((label, i) => {
+                const id = `titleField_${i}`;
+                return `<div class="mb-3">
+                    <label class="form-label fw-semibold small" for="${id}">${_esc(label)}</label>
+                    <textarea class="form-control" id="${id}" rows="3" data-placeholder="${_esc(label)}"></textarea>
+                </div>`;
+            }).join('');
+
+            // Восстанавливаем ранее введённые значения
+            container.querySelectorAll('[data-placeholder]').forEach(el => {
+                if (Object.prototype.hasOwnProperty.call(savedValues, el.dataset.placeholder)) {
+                    el.value = savedValues[el.dataset.placeholder];
+                }
+            });
+        }
+
+        // Кнопка «Применить»
+        const applyBtn = document.getElementById('applyTitlePageBtn');
+        applyBtn.onclick = () => {
+            const values = {};
+            container.querySelectorAll('[data-placeholder]').forEach(el => {
+                values[el.dataset.placeholder] = el.value;
+            });
+
+            window._titlePageFilled = {
+                title_page_body:     _fillPlaceholders(body, values),
+                title_page_approval: _fillPlaceholders(approval, values),
+                _values:             values,
+            };
+
+            bootstrap.Modal.getInstance(document.getElementById('titlePageFillModal'))?.hide();
+        };
+
+        if (!_titleModal) {
+            _titleModal = new bootstrap.Modal(document.getElementById('titlePageFillModal'));
+        }
+        _titleModal.show();
+    });
+
+    function _esc(s) {
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+})();

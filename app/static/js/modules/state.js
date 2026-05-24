@@ -147,6 +147,13 @@
 
 
         if (window.uploadedFiles && window.uploadedFiles.length
+            && typeof window.rehydrateUploadUI === 'function')
+        {
+            try { window.rehydrateUploadUI(); }
+            catch (e) { console.error('[state] rehydrateUploadUI failed', e); }
+        }
+
+        if (window.uploadedFiles && window.uploadedFiles.length
             && typeof window.rehydrateSheetsUI === 'function')
         {
             try { window.rehydrateSheetsUI(); }
@@ -167,6 +174,23 @@
         {
             try { window.renderStep4(); }
             catch (e) { console.error('[state] renderStep4 failed', e); }
+        }
+
+        // Легенда файлов на шаге 5 — восстанавливаем при нескольких файлах.
+        if (window.processedFiles && window.processedFiles.length > 1
+            && typeof renderLegendSettings === 'function')
+        {
+            const _rl_labels = {};
+            const _rl_colors = {};
+            if (window.appData) {
+                const _rl_entry = Object.values(window.appData).find(e => e && e.file_labels);
+                if (_rl_entry) {
+                    Object.assign(_rl_labels, _rl_entry.file_labels);
+                    Object.assign(_rl_colors, _rl_entry.file_colors || {});
+                }
+            }
+            try { renderLegendSettings(_rl_labels, _rl_colors); }
+            catch (e) { console.error('[state] renderLegendSettings failed', e); }
         }
 
         // Шаг 5 (визуализация) — если есть appData.

@@ -154,13 +154,18 @@
 <div class="modal fade" id="aiGroupProgressModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-dialog-centered modal-sm">
         <div class="modal-content">
-            <div class="modal-body text-center py-4 ui-system-font">
+            <div class="modal-body text-center py-4 pb-2 ui-system-font">
                 <div class="mb-3"><i class="fa-solid fa-robot fa-2x text-primary"></i></div>
                 <div class="fw-semibold mb-3">ИИ анализирует ответы...</div>
                 <div class="progress progress-xs">
                     <div class="progress-bar progress-bar-striped progress-bar-animated w-100"></div>
                 </div>
                 <div class="text-muted small mt-2">Обычно занимает не более пары минут...</div>
+            </div>
+            <div class="modal-footer justify-content-center border-0 pt-0">
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="aiGroupCancelBtn">
+                    <i class="fa-solid fa-xmark me-1"></i>Отмена
+                </button>
             </div>
         </div>
     </div>
@@ -276,6 +281,34 @@
                 </button>
                 <button type="button" class="btn btn-primary" id="applyMergeQuestionsBtn">
                     <i class="fa-solid fa-code-merge me-1"></i>Склеить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Заполнение титульного листа -->
+<div class="modal fade" id="titlePageFillModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title ui-system-font">
+                    <i class="fa-solid fa-file-signature me-2"></i>Титульный лист
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body ui-system-font">
+                <p class="small mb-3">
+                    Заполните поля — они подставятся в шаблон титульного листа.
+                </p>
+                <div id="titlePageFieldsContainer"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fa-solid fa-xmark me-1"></i>Отмена
+                </button>
+                <button type="button" class="btn btn-primary" id="applyTitlePageBtn">
+                    <i class="fa-solid fa-floppy-disk me-1"></i>Применить
                 </button>
             </div>
         </div>

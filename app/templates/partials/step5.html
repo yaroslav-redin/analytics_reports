@@ -21,6 +21,12 @@
                 </div>
             </div>
 
+            <div class="mx-auto d-flex justify-content-center" style="max-width:390px;width:100%;">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="titlePageFillBtn">
+                    <i class="fa-solid fa-file-signature me-1"></i>Титульный лист
+                </button>
+            </div>
+
             <div class="p-3 d-flex gap-2 mx-auto" style="max-width:390px;width:100%;">
                 <button type="button" class="btn btn-primary flex-fill" id="downloadApiBtn">
                     <i class="fa-solid fa-file-arrow-down me-2"></i>Скачать отчёт
@@ -31,7 +37,7 @@
             </div>
 
             <!-- Прогресс -->
-            <div id="exportProgressContainer" class="d-none">
+            <div id="exportProgressContainer" class="export-progress-hidden">
                 <div class="progress mb-1" style="height:36px;border-radius:8px;position:relative;">
                     <div id="exportProgressBar"
                          class="progress-bar progress-bar-striped progress-bar-animated bg-primary"

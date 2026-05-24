@@ -274,6 +274,16 @@ document.getElementById('fuzzyConfirmBtn').addEventListener('click', () => {
 });
 
 // ИИ-группировка через API
+let _aiGroupAbortController = null;
+let _aiGroupTaskId = null;
+
+document.getElementById('aiGroupCancelBtn').addEventListener('click', async () => {
+    if (_aiGroupAbortController) _aiGroupAbortController.abort();
+    if (_aiGroupTaskId) {
+        try { await fetch(`/ai_group_cancel/${_aiGroupTaskId}`, { method: 'POST' }); } catch {}
+    }
+});
+
 document.getElementById('fuzzyTabPane').addEventListener('click', async e => {
     const btn = e.target.closest('[data-ai-backend]');
     if (!btn || !_fuzzyTargetId) return;
@@ -284,19 +294,35 @@ document.getElementById('fuzzyTabPane').addEventListener('click', async e => {
     const answers = dataObj.data.map(r => String(r.answer));
     const questionName = dataObj.question_name || '';
 
+    _aiGroupAbortController = new AbortController();
+    _aiGroupTaskId = null;
+
     const progressModal = new bootstrap.Modal(document.getElementById('aiGroupProgressModal'));
     progressModal.show();
 
     try {
-        const resp = await fetch('/ai_group_answers', {
+        const startResp = await fetch('/ai_group_start', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ answers, question_name: questionName })
+            body: JSON.stringify({ answers, question_name: questionName }),
+            signal: _aiGroupAbortController.signal,
         });
-        const result = await resp.json();
+        if (!startResp.ok) {
+            const data = await startResp.json().catch(() => ({}));
+            progressModal.hide();
+            showToast(data.message || 'Ошибка запуска группировки', 'danger');
+            return;
+        }
+        const startData = await startResp.json();
+        _aiGroupTaskId = startData.task_id;
+
+        const resultResp = await fetch(`/ai_group_result/${_aiGroupTaskId}`, {
+            signal: _aiGroupAbortController.signal,
+        });
+        const result = await resultResp.json();
         progressModal.hide();
 
-        if (!resp.ok) {
+        if (!resultResp.ok) {
             showToast(result.message || 'Ошибка ИИ-группировки', 'danger');
             return;
         }
@@ -332,7 +358,12 @@ document.getElementById('fuzzyTabPane').addEventListener('click', async e => {
         _fuzzyShowPreview(data, origAnswers);
     } catch (err) {
         progressModal.hide();
-        showToast('Ошибка соединения с сервером', 'danger');
+        if (err.name !== 'AbortError') {
+            showToast('Ошибка соединения с сервером', 'danger');
+        }
+    } finally {
+        _aiGroupAbortController = null;
+        _aiGroupTaskId = null;
     }
 });
 

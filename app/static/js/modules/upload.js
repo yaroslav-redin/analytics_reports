@@ -1,3 +1,8 @@
+function _escHtml(s) {
+    return String(s).replace(/[&<>"']/g, c =>
+        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 // ===================== DRAG & DROP + FILE PREVIEW =====================
 (function () {
     const dropZone = document.getElementById('dropZone');
@@ -31,10 +36,25 @@ function updateFilePreview(files) {
     preview.innerHTML = Array.from(files).map(f => `
         <div class="d-flex align-items-center gap-2 py-1 border-bottom">
             <i class="fa-solid ${ext(f)} fa-fw"></i>
-            <span class="text-truncate small">${f.name}</span>
+            <span class="text-truncate small">${_escHtml(f.name)}</span>
             <small class="text-muted ms-auto flex-shrink-0">${(f.size / 1024).toFixed(0)}&nbsp;КБ</small>
         </div>`).join('');
 }
+
+function rehydrateUploadUI() {
+    if (!window.uploadedFiles || !window.uploadedFiles.length) return false;
+    const preview = document.getElementById('fileListPreview');
+    if (!preview) return false;
+    const ext = name => name.toLowerCase().endsWith('.csv')
+        ? 'fa-file-csv text-secondary' : 'fa-file-excel text-success';
+    preview.innerHTML = window.uploadedFiles.map(f => `
+        <div class="d-flex align-items-center gap-2 py-1 border-bottom">
+            <i class="fa-solid ${ext(f.original_name)} fa-fw"></i>
+            <span class="text-truncate small">${_escHtml(f.original_name)}</span>
+        </div>`).join('');
+    return true;
+}
+window.rehydrateUploadUI = rehydrateUploadUI;
 
 // ===================== UPLOAD FORM =====================
 document.getElementById('uploadForm').addEventListener('submit', async (e) => {
@@ -56,13 +76,14 @@ document.getElementById('uploadForm').addEventListener('submit', async (e) => {
             container.innerHTML = '';
 
             window.uploadedFiles.forEach((file, fIdx) => {
-                container.insertAdjacentHTML('beforeend', `<div class="file-section-title">Файл ${fIdx + 1}: ${file.original_name}</div>`);
+                container.insertAdjacentHTML('beforeend', `<div class="file-section-title">Файл ${fIdx + 1}: ${_escHtml(file.original_name)}</div>`);
                 file.sheets.forEach(sheet => {
                     const autoChecked = file.sheets.length === 1 ? ' checked' : '';
+                    const esc = _escHtml(sheet);
                     container.insertAdjacentHTML('beforeend', `
                         <div class="form-check ms-3">
-                            <input class="form-check-input sheet-checkbox" type="checkbox" value="${sheet}" data-filename="${file.filename}" id="s_${fIdx}_${sheet}"${autoChecked}>
-                            <label class="form-check-label" for="s_${fIdx}_${sheet}">${sheet}</label>
+                            <input class="form-check-input sheet-checkbox" type="checkbox" value="${esc}" data-filename="${_escHtml(file.filename)}" id="s_${fIdx}_${esc}"${autoChecked}>
+                            <label class="form-check-label" for="s_${fIdx}_${esc}">${esc}</label>
                         </div>`);
                 });
             });

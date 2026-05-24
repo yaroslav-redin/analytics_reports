@@ -100,8 +100,11 @@ async def auth_callback(request: Request):
         "roles": user_roles,
         "photo_url": (user.get("Photo") or {}).get("UrlSmall", ""),
     }
+    flags = await upsert_user(user_data)
+    if flags["is_banned"]:
+        return RedirectResponse("/login?error=banned")
+    user_data["is_admin"] = flags["is_admin"]
     request.session["user"] = user_data
-    await upsert_user(user_data)
     return RedirectResponse("/")
 
 

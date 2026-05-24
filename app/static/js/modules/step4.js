@@ -439,7 +439,7 @@ document.getElementById('availableQuestionsList').addEventListener('click', (e) 
 
     const btn = e.target.closest('.merge-question-btn');
     if (!btn) return;
-    _mergeQuestionsSourceName = btn.dataset.qname;
+    _mergeQuestionsSourceName = btn.closest('.available-q-item')?.dataset.qname;
     openMergeQuestionsModal(_mergeQuestionsSourceName);
 });
 

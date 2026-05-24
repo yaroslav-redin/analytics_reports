@@ -29,7 +29,10 @@ function _onDomReady(fn) {
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', fn, { once: true });
     } else {
-        fn();
+        // Скрипты в конце <body>: readyState уже 'interactive', но следующие
+        // <script>-теги ещё не выполнены. setTimeout(0) откладывает вызов
+        // до окончания синхронной загрузки всех модулей.
+        setTimeout(fn, 0);
     }
 }
 

@@ -98,7 +98,11 @@ def _normalize_batch(batch_answers: list[str], question_name: str) -> dict[str, 
 
 # ===================== ПАРАЛЛЕЛЬНАЯ НОРМАЛИЗАЦИЯ БАТЧЕЙ =====================
 
-def _normalize_in_parallel(batches: list[list[str]], question_name: str) -> dict[str, str]:
+def _normalize_in_parallel(
+    batches: list[list[str]],
+    question_name: str,
+    cancel_event: threading.Event | None = None,
+) -> dict[str, str]:
     """
     Параллельно нормализует несколько батчей, объединяет результаты в общую norm_map.
     При любой ошибке в каком-то батче — пробрасывает первую пойманную ошибку наверх,
@@ -114,6 +118,10 @@ def _normalize_in_parallel(batches: list[list[str]], question_name: str) -> dict
             for idx, batch in enumerate(batches)
         }
         for fut in as_completed(futures):
+            if cancel_event and cancel_event.is_set():
+                for f in futures:
+                    f.cancel()
+                return {}
             try:
                 merged.update(fut.result())
             except Exception as e:
@@ -127,7 +135,11 @@ def _normalize_in_parallel(batches: list[list[str]], question_name: str) -> dict
 
 # ===================== ПУБЛИЧНАЯ ТОЧКА ВХОДА =====================
 
-def group_answers_openrouter(answers: list, question_name: str) -> list[dict]:
+def group_answers_openrouter(
+    answers: list,
+    question_name: str,
+    cancel_event: threading.Event | None = None,
+) -> list[dict]:
     """
     Группирует ответы через LLM.
     Оптимизации:
@@ -154,7 +166,9 @@ def group_answers_openrouter(answers: list, question_name: str) -> list[dict]:
                 norm_map[m] = grp["canonical"]
         return _build_groups_from_norm_map(answers_str, norm_map)
 
-    # 3) Батчинг.
+    if cancel_event and cancel_event.is_set():
+        return []
+
     batch_size = max(1, cfg.get_int("llm_group_batch_size"))
     batches = [
         unique_answers[i : i + batch_size]
@@ -168,7 +182,10 @@ def group_answers_openrouter(answers: list, question_name: str) -> list[dict]:
         f"параллельно до {cfg.get_int('llm_group_max_concurrency')}"
     )
 
-    norm_map = _normalize_in_parallel(batches, question_name)
+    norm_map = _normalize_in_parallel(batches, question_name, cancel_event=cancel_event)
+
+    if cancel_event and cancel_event.is_set():
+        return []
 
     groups = _build_groups_from_norm_map(answers_str, norm_map)
 

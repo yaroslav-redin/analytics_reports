@@ -219,7 +219,7 @@ def _render_title_body(doc, body_text: str):
             _p_inline_bold(doc, line, size=14, space_after=4)
 
 
-def _render_title_page(doc) -> bool:
+def _render_title_page(doc, title_page_body=None, title_page_approval=None) -> bool:
     """
     Рисует титульный лист в начале документа на основе настроек:
       • cfg.title_page_approval — гриф «УТВЕРЖДАЮ» (плашка справа);
@@ -228,8 +228,8 @@ def _render_title_page(doc) -> bool:
     добавит page-break перед основным содержимым).
     Если оба поля пустые — титульный лист не создаётся.
     """
-    approval = (cfg.get("title_page_approval") or "").strip()
-    body = (cfg.get("title_page_body") or "").strip()
+    approval = (title_page_approval if title_page_approval is not None else cfg.get("title_page_approval") or "").strip()
+    body = (title_page_body if title_page_body is not None else cfg.get("title_page_body") or "").strip()
     if not approval and not body:
         return False
 
@@ -831,7 +831,8 @@ def _group_questions_by_section(questions: list) -> list[tuple[dict | None, list
     return groups
 
 
-def generate_analysis_docx(questions: list, progress_callback=None, cancel_event=None) -> bytes:
+def generate_analysis_docx(questions: list, progress_callback=None, cancel_event=None,
+                           title_page_body=None, title_page_approval=None) -> bytes:
     """
     Аналитический файл. LLM-вызовы выполняются параллельно (до _MAX_CONCURRENCY),
     после чего документ собирается строго в исходном порядке вопросов.
@@ -845,7 +846,8 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
     table_counter = [1]
     part_counter = [1]
 
-    title_rendered = _render_title_page(doc)
+    title_rendered = _render_title_page(doc, title_page_body=title_page_body,
+                                         title_page_approval=title_page_approval)
     if title_rendered:
         doc.add_page_break()
 
@@ -896,8 +898,9 @@ def generate_analysis_docx(questions: list, progress_callback=None, cancel_event
     def _run_final_conclusion():
         nonlocal final_result
         if total_final and not (cancel_event and cancel_event.is_set()):
+            questions_for_final = [q for q in questions if not q.get("skip_analytics")]
             final_result = _generate_final_conclusion(
-                questions,
+                questions_for_final,
                 cancel_event=cancel_event,
                 progress_callback=progress_callback,
                 progress_offset=total_questions + total_conclusions,

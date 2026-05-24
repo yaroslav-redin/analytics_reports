@@ -1,4 +1,6 @@
 // ===================== ШАГ 5: ВИЗУАЛИЗАЦИЯ =====================
+function _safeColor(v) { return /^#[0-9a-fA-F]{6}$/.test(v) ? v : '#6c757d'; }
+
 window.chartsData = {};
 window.stackedChartsData = {};
 window.pieChartsData = {};
@@ -33,14 +35,15 @@ function _newAppDataEntry(item, visualize) {
 
 function _buildReportSectionCard(secId, secName, secColor, isCollapsed) {
     const card = _tpl('tpl-report-section-card');
-    card.style.borderLeft = `3px solid ${secColor}`;
+    const safeColor = _safeColor(secColor);
+    card.style.borderLeft = `3px solid ${safeColor}`;
     card.style.paddingLeft = '8px';
 
-    card.querySelector('.report-section-icon').style.color = secColor;
+    card.querySelector('.report-section-icon').style.color = safeColor;
 
     const nameSpan = card.querySelector('.report-section-name');
     nameSpan.textContent = secName;
-    nameSpan.style.color = secColor;
+    nameSpan.style.color = safeColor;
 
     const collapseBtn = card.querySelector('.report-section-collapse-btn');
     collapseBtn.dataset.sectionId = secId;
@@ -334,6 +337,15 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
     } else {
         document.querySelectorAll('.legend-label').forEach(el => { fileLabels[el.dataset.file] = el.value || el.placeholder; });
         document.querySelectorAll('.legend-color').forEach(el => { fileColors[el.dataset.file] = el.value; });
+        // Запасной путь: если DOM легенды пуст (например, после перезагрузки без рехидрации),
+        // берём метки и цвета из уже имеющегося appData.
+        if (Object.keys(fileLabels).length === 0 && window.appData) {
+            const _fe = Object.values(window.appData).find(e => e && e.file_labels);
+            if (_fe) {
+                Object.assign(fileLabels, _fe.file_labels);
+                Object.assign(fileColors, _fe.file_colors || {});
+            }
+        }
     }
 
     const ALL_VIZ = ['Таблица', 'Столбчатая диаграмма', 'Накопленная диаграмма', 'Круговая диаграмма'];
