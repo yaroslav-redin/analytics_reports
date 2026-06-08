@@ -276,6 +276,14 @@ document.getElementById('fuzzyConfirmBtn').addEventListener('click', () => {
 // ИИ-группировка через API
 let _aiGroupAbortController = null;
 let _aiGroupTaskId = null;
+let _aiProgressModalShownPromise = null;
+
+// Bootstrap 5 игнорирует hide() пока идёт анимация открытия модалки.
+// Эта функция дожидается shown.bs.modal перед тем как скрыть.
+function _hideAiProgressModal(modalInstance) {
+    if (!_aiProgressModalShownPromise) { try { modalInstance.hide(); } catch {} return; }
+    _aiProgressModalShownPromise.then(() => { try { modalInstance.hide(); } catch {} });
+}
 
 document.getElementById('aiGroupCancelBtn').addEventListener('click', async () => {
     if (_aiGroupAbortController) _aiGroupAbortController.abort();
@@ -297,7 +305,14 @@ document.getElementById('fuzzyTabPane').addEventListener('click', async e => {
     _aiGroupAbortController = new AbortController();
     _aiGroupTaskId = null;
 
-    const progressModal = new bootstrap.Modal(document.getElementById('aiGroupProgressModal'));
+    const progressModalEl = document.getElementById('aiGroupProgressModal');
+    const progressModal = bootstrap.Modal.getOrCreateInstance(progressModalEl);
+
+    // Создаём promise, который резолвится когда модалка полностью открылась.
+    // Если hide() вызвать раньше shown.bs.modal — Bootstrap проигнорирует его.
+    _aiProgressModalShownPromise = new Promise(resolve => {
+        progressModalEl.addEventListener('shown.bs.modal', resolve, { once: true });
+    });
     progressModal.show();
 
     try {
@@ -309,7 +324,7 @@ document.getElementById('fuzzyTabPane').addEventListener('click', async e => {
         });
         if (!startResp.ok) {
             const data = await startResp.json().catch(() => ({}));
-            progressModal.hide();
+            _hideAiProgressModal(progressModal);
             showToast(data.message || 'Ошибка запуска группировки', 'danger');
             return;
         }
@@ -320,7 +335,7 @@ document.getElementById('fuzzyTabPane').addEventListener('click', async e => {
             signal: _aiGroupAbortController.signal,
         });
         const result = await resultResp.json();
-        progressModal.hide();
+        _hideAiProgressModal(progressModal);
 
         if (!resultResp.ok) {
             showToast(result.message || 'Ошибка ИИ-группировки', 'danger');
@@ -357,7 +372,7 @@ document.getElementById('fuzzyTabPane').addEventListener('click', async e => {
         const data = Object.values(mergedMap).sort((a, b) => b._total - a._total);
         _fuzzyShowPreview(data, origAnswers);
     } catch (err) {
-        progressModal.hide();
+        _hideAiProgressModal(progressModal);
         if (err.name !== 'AbortError') {
             showToast('Ошибка соединения с сервером', 'danger');
         }

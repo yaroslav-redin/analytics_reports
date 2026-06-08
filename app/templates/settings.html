@@ -55,18 +55,6 @@
                         <div class="card-body">
                             <h6 class="fw-semibold mb-3">LLM и API</h6>
                             <div class="mb-3">
-                                <label class="settings-label">OpenRouter API Key</label>
-                                <div class="input-group input-group-sm">
-                                    <input type="text" class="form-control form-control-sm font-monospace" id="s_openrouter_api_key"
-                                           autocomplete="new-password" style="-webkit-text-security:disc;text-security:disc;">
-                                    <button class="btn btn-outline-secondary" type="button" id="toggleApiKeyBtn"
-                                            onclick="toggleApiKey()" title="Показать/скрыть">
-                                        <i class="fa-solid fa-eye" id="toggleApiKeyIcon"></i>
-                                    </button>
-                                </div>
-                                <div class="settings-hint">Получить на <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a>. Если задан в <code>.env</code>, оставьте пустым.</div>
-                            </div>
-                            <div class="mb-3">
                                 <label class="settings-label">ID модели</label>
                                 <input type="text" class="form-control form-control-sm font-monospace" id="s_openrouter_model" placeholder="meta-llama/llama-3.3-70b-instruct:free">
                                 <div class="settings-hint">Список моделей: <a href="https://openrouter.ai/models" target="_blank">openrouter.ai/models</a></div>
@@ -320,16 +308,6 @@
     });
 })();
 
-// ── api key toggle ────────────────────────────────────────────────────────────
-function toggleApiKey() {
-    const input = document.getElementById('s_openrouter_api_key');
-    const icon = document.getElementById('toggleApiKeyIcon');
-    const masked = input.style.webkitTextSecurity === 'disc';
-    input.style.webkitTextSecurity = masked ? 'none' : 'disc';
-    input.style.textSecurity = masked ? 'none' : 'disc';
-    icon.className = masked ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
-}
-
 // ── tab switching ─────────────────────────────────────────────────────────────
 document.querySelectorAll('#settingsTabs .nav-link').forEach(link => {
     link.addEventListener('click', e => {
@@ -389,7 +367,6 @@ async function loadSettings() {
     const s = await res.json();
     _defaults = s;
 
-    document.getElementById('s_openrouter_api_key').value = s.openrouter_api_key || '';
     document.getElementById('s_openrouter_model').value = s.openrouter_model || '';
     document.getElementById('s_llm_temperature').value = s.llm_temperature || '';
     document.getElementById('s_llm_max_tokens_analysis').value = s.llm_max_tokens_analysis || '';
@@ -435,7 +412,6 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     );
 
     const payload = {
-        openrouter_api_key:       document.getElementById('s_openrouter_api_key').value,
         openrouter_model:         document.getElementById('s_openrouter_model').value,
         llm_temperature:          document.getElementById('s_llm_temperature').value,
         llm_max_tokens_analysis:  document.getElementById('s_llm_max_tokens_analysis').value,
@@ -462,9 +438,6 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
         missing_value_placeholder: document.getElementById('s_missing_value_placeholder').value,
         max_upload_files:         document.getElementById('s_max_upload_files').value,
     };
-
-    // skip empty API key (don't overwrite with blank if user didn't touch it)
-    if (!payload.openrouter_api_key) delete payload.openrouter_api_key;
 
     try {
         const res = await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
