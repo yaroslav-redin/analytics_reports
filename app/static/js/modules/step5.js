@@ -18,6 +18,8 @@ function _newAppDataEntry(item, visualize) {
             topN:            1,
             chartDirection:  'y',
             highlightColor:  '#dc3545',
+            dimOthers:       false,
+            dimColor:        '#6c757d',
             hiddenCol:       'none',
             tableVertical:   false,
             showLegend:      visualize && item.file_keys.length > 1,
@@ -113,6 +115,13 @@ function _buildFullItemDOM(id, entry, container) {
     const hlColorInput = settings.querySelector('.setting-highlight-color');
     hlColorInput.dataset.id = id;
     hlColorInput.value = entry.options.highlightColor || '#dc3545';
+
+    const dimOthersInput = _setInputId('.setting-dim-others', `dimothers_${id}`);
+    dimOthersInput.checked = !!entry.options.dimOthers;
+
+    const dimColorInput = settings.querySelector('.setting-dim-color');
+    dimColorInput.dataset.id = id;
+    dimColorInput.value = entry.options.dimColor || '#6c757d';
 
     settings.querySelector('.random-highlight-color-btn').dataset.id = id;
     settings.querySelector('.full-item-hide-col-btn').dataset.id     = id;
@@ -575,6 +584,11 @@ document.addEventListener('click', e => {
             const tabs = el.dataset.visTabs.split(' ');
             el.classList.toggle('d-none', !tabs.includes(tab));
         });
+        const dimGroup = settingsEl.querySelector('.setting-dim-others-group');
+        if (dimGroup) {
+            const hlOn = window.appData[id]?.options?.highlightTop;
+            dimGroup.classList.toggle('d-none', tab !== 'bar' || !hlOn);
+        }
     }
 
 

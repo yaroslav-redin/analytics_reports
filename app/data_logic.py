@@ -70,13 +70,28 @@ def clean_age(age_str):
 def clean_dataframe(df):
     for col in df.columns:
         if is_system_column(col): continue
-        elif 'возраст' in col.lower() or 'лет' in col.lower(): df[col] = df[col].apply(clean_age)
         else: df[col] = unify_numbered_answers(df[col])
 
     df.rename(columns=lambda x: clean_column_name(x), inplace=True)
     return df
 
-def get_column_groups(columns):
+def _is_single_choice_group(df, cols):
+    """True if every column in the group has at most 1 distinct non-placeholder value.
+    This distinguishes checkbox-style multi-select (one fixed label per column)
+    from rating/scale multi-select (multiple different answers per column)."""
+    placeholder = cfg.get("missing_value_placeholder", "Нет ответа")
+    for col in cols:
+        if col not in df.columns:
+            continue
+        series = df[col].dropna()
+        series = series[series.astype(str).str.strip() != ""]
+        series = series[series.astype(str).str.lower() != "nan"]
+        series = series[series.astype(str) != placeholder]
+        if series.nunique() > 1:
+            return False
+    return True
+
+def get_column_groups(columns, df=None):
     groups = {}
     prefix_counts = {}
     for col in columns:
@@ -84,14 +99,24 @@ def get_column_groups(columns):
             prefix = col.split(' / ')[0].strip()
             prefix_counts[prefix] = prefix_counts.get(prefix, 0) + 1
 
+    multi_answer_prefixes = set()
+    if df is not None:
+        for prefix, count in prefix_counts.items():
+            if count > 1:
+                prefix_cols = [c for c in columns if ' / ' in c and c.split(' / ')[0].strip() == prefix]
+                if not _is_single_choice_group(df, prefix_cols):
+                    multi_answer_prefixes.add(prefix)
+
     for col in columns:
         if ' / ' in col:
             prefix = col.split(' / ')[0].strip()
-            if prefix_counts[prefix] > 1:
+            if prefix_counts[prefix] > 1 and prefix not in multi_answer_prefixes:
                 if prefix not in groups: groups[prefix] = []
                 groups[prefix].append(col)
-            else: groups[col] = [col]
-        else: groups[col] = [col]
+            else:
+                groups[col] = [col]
+        else:
+            groups[col] = [col]
     return groups
 
 def _get_answer_counts(df, q_name, groups_cache):
@@ -120,7 +145,7 @@ def generate_report_data(upload_dir, request_data):
         if os.path.exists(filepath):
             df = pd.read_parquet(filepath)
             dfs[clean_filename] = df
-            groups_cache[clean_filename] = get_column_groups(df.columns)
+            groups_cache[clean_filename] = get_column_groups(df.columns, df)
 
     results = []
 

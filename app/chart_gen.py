@@ -11,7 +11,7 @@ from docx.opc.part import Part
 from docx.opc.packuri import PackURI
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docx.shared import Pt
+from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 
 RT_CHART   = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart'
@@ -228,7 +228,7 @@ def _bar_xml(answers, series_labels, series_values,
         '    </c:plotArea>',
     ]
 
-    effective_show_legend = show_legend and not (point_colors and not stacked)
+    effective_show_legend = show_legend and not (point_colors and not stacked and len(series_labels) == 1)
     if effective_show_legend:
 
         out += [
@@ -376,6 +376,47 @@ def _embed_chart(doc, chart_xml: bytes, xlsx: bytes, n: int, cx=TEXT_W, cy=BAR_H
     run._r.append(etree.fromstring(drawing_xml.encode('utf-8')))
 
 
+def _compute_highlight_point_colors(rows_data, file_keys, file_totals,
+                                    highlight_top, top_n, highlight_color,
+                                    dim_others, dim_color, bar_colors, is_single_file):
+    """Compute effective per-point colors for bar chart respecting highlight/dim settings."""
+    if not highlight_top:
+        return bar_colors if is_single_file else None
+
+    all_bars = []
+    for r in rows_data:
+        for fk in file_keys:
+            count = r['counts'].get(fk, 0)
+            total = file_totals.get(fk, 0)
+            pct = count / total * 100 if total > 0 else 0
+            all_bars.append((r['answer'], fk, pct))
+    all_bars.sort(key=lambda x: x[2], reverse=True)
+    top_set = {(a, fk) for a, fk, _ in all_bars[:min(top_n, len(all_bars))]}
+
+    if is_single_file:
+        fk = file_keys[0]
+        result = []
+        for i, r in enumerate(rows_data):
+            if (r['answer'], fk) in top_set:
+                result.append(highlight_color)
+            elif dim_others:
+                result.append(dim_color)
+            else:
+                result.append(bar_colors[i] if i < len(bar_colors) else '')
+        return result
+    else:
+        result = []
+        for r in rows_data:
+            is_top = any((r['answer'], fk) in top_set for fk in file_keys)
+            if is_top:
+                result.append(highlight_color)
+            elif dim_others:
+                result.append(dim_color)
+            else:
+                result.append('')
+        return result
+
+
 # ── public API ────────────────────────────────────────────────────────────────
 
 def insert_visualization(doc, q: dict, chart_counter: list,
@@ -418,7 +459,19 @@ def insert_visualization(doc, q: dict, chart_counter: list,
     bar_colors = q.get('bar_colors') or []
     file_colors_map = q.get('file_colors') or {}
     series_colors = [file_colors_map.get(fk, '') for fk in file_keys]
-    point_colors_bar = bar_colors if is_single_file else None
+    file_totals_map = q.get('file_totals') or {}
+
+    effective_bar_colors = _compute_highlight_point_colors(
+        rows_data, file_keys, file_totals_map,
+        q.get('highlight_top', False), q.get('top_n', 1),
+        q.get('highlight_color', '#dc3545'),
+        q.get('dim_others', False), q.get('dim_color', '#6c757d'),
+        bar_colors, is_single_file,
+    )
+    if is_single_file:
+        point_colors_bar = effective_bar_colors
+    else:
+        point_colors_bar = effective_bar_colors if (effective_bar_colors and any(effective_bar_colors)) else None
 
     from docx.shared import Pt
     from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
@@ -574,7 +627,23 @@ def _insert_word_table(doc, q: dict):
         borders_el.append(b)
     tblPr.append(borders_el)
 
-    def cell_text(cell, text, bold=False, center=False):
+    # Compute top-N highlighted answers for this question
+    _hl_top = q.get('highlight_top', False)
+    _hl_top_n = q.get('top_n', 1)
+    _hl_color_hex = q.get('highlight_color', '#dc3545')
+    _hl_top_answers: set = set()
+    if _hl_top and _hl_top_n > 0:
+        _all_bars = []
+        for _r in rows_data:
+            for _fk in file_keys:
+                _cnt = _r['counts'].get(_fk, 0)
+                _tot = file_totals.get(_fk, 0)
+                _pct = _cnt / _tot * 100 if _tot > 0 else 0
+                _all_bars.append((_r['answer'], _pct))
+        _all_bars.sort(key=lambda x: x[1], reverse=True)
+        _hl_top_answers = {a for a, _ in _all_bars[:min(_hl_top_n, len(_all_bars))]}
+
+    def cell_text(cell, text, bold=False, center=False, color_hex=None):
         para = cell.paragraphs[0]
         para.clear()
         run = para.add_run(str(text))
@@ -583,6 +652,12 @@ def _insert_word_table(doc, q: dict):
         run.font.size = Pt(14)
         if center:
             para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        if color_hex:
+            try:
+                h = color_hex.lstrip('#')
+                run.font.color.rgb = RGBColor(int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+            except (ValueError, IndexError):
+                pass
 
     # ── header ──────────────────────────────────────────────────────────────
     hdr = table.rows[0].cells
@@ -606,27 +681,28 @@ def _insert_word_table(doc, q: dict):
     for ri, row in enumerate(rows_data):
         cells = table.rows[ri + 1].cells
         ci = 0
-        cell_text(cells[ci], row['answer']); ci += 1
+        row_color = _hl_color_hex if row['answer'] in _hl_top_answers else None
+        cell_text(cells[ci], row['answer'], color_hex=row_color); ci += 1
 
         if is_single:
             fk = file_keys[0]
             total = file_totals.get(fk, 0)
             count = row['counts'].get(fk, 0)
             if show_count:
-                cell_text(cells[ci], count, center=True); ci += 1
+                cell_text(cells[ci], count, center=True, color_hex=row_color); ci += 1
             if show_pct:
                 pct = f'{count / total * 100:.1f}%' if total else '—'
-                cell_text(cells[ci], pct, center=True); ci += 1
+                cell_text(cells[ci], pct, center=True, color_hex=row_color); ci += 1
         else:
             if show_count:
                 for fk in file_keys:
-                    cell_text(cells[ci], row['counts'].get(fk, 0), center=True); ci += 1
+                    cell_text(cells[ci], row['counts'].get(fk, 0), center=True, color_hex=row_color); ci += 1
             if show_pct:
                 for fk in file_keys:
                     count = row['counts'].get(fk, 0)
                     total = file_totals.get(fk, 0)
                     pct = f'{count / total * 100:.1f}%' if total else '—'
-                    cell_text(cells[ci], pct, center=True); ci += 1
+                    cell_text(cells[ci], pct, center=True, color_hex=row_color); ci += 1
 
     # ── total row ───────────────────────────────────────────────────────────
     if show_total:

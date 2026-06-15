@@ -383,6 +383,8 @@ function drawChart(id) {
     const isHorizontal = dataObj.options.chartDirection === 'y';
     const topN = dataObj.options.highlightTop ? Math.min(dataObj.options.topN, activeData.length * dataObj.file_keys.length) : 0;
     const HIGHLIGHT_COLOR = dataObj.options.highlightColor || '#0d6efd';
+    const DIM_OTHERS = topN > 0 && dataObj.options.dimOthers;
+    const DIM_COLOR = dataObj.options.dimColor || '#6c757d';
 
     const fileTotals = {};
     dataObj.file_keys.forEach(fk => {
@@ -446,6 +448,7 @@ function drawChart(id) {
             label: dataObj.file_labels[fileKey],
             backgroundColor: activeData.map((r, barIdx) => {
                 if (topN > 0 && topBarSet.has(`${r.answer}__${fileKey}`)) return HIGHLIGHT_COLOR;
+                if (DIM_OTHERS) return DIM_COLOR;
                 return isSingleFile ? (dataObj.barColors[barIdx] || PIE_COLORS[barIdx % PIE_COLORS.length]) : dataObj.file_colors[fileKey];
             }),
             data: rawCounts.map(c => ft > 0 ? (c / ft) * 100 : 0),
@@ -607,11 +610,106 @@ function drawChartForBoth(sourceId, chartType) {
     const dataObj = window.appData[sourceId];
     if (!dataObj) return;
 
+    // Уничтожаем все предыдущие графики этой панели (bar/stacked + pie-канвасы)
     const chartKey = `both_${sourceId}`;
-    if (window.charts[chartKey]) window.charts[chartKey].destroy();
+    if (window.charts[chartKey]) { window.charts[chartKey].destroy(); delete window.charts[chartKey]; }
+    dataObj.file_keys.forEach((_, fi) => {
+        const pk = `both_pie_${sourceId}_${fi}`;
+        if (window.charts[pk]) { window.charts[pk].destroy(); delete window.charts[pk]; }
+    });
 
     const activeData = dataObj.data.filter(r => r.included).sort((a, b) => b._total - a._total);
     const canvas = document.getElementById(`both_canvas_${sourceId}`);
+
+    // ── Круговая ──────────────────────────────────────────────────────
+    if (chartType === 'pie') {
+        if (canvas) canvas.style.display = 'none';
+        const chartContainer = canvas ? canvas.closest('.chart-container') : null;
+        if (!chartContainer) return;
+
+        chartContainer.querySelector('.both-pie-canvases')?.remove();
+        if (activeData.length === 0) return;
+
+        const MAX_PIE = 25;
+        while (dataObj.pieColors.length < activeData.length) {
+            dataObj.pieColors.push(PIE_COLORS[dataObj.pieColors.length % PIE_COLORS.length]);
+        }
+        const pieLabels = activeData.map(r => r.answer.length > 40 ? r.answer.substring(0, 40) + '…' : r.answer);
+        const colors = activeData.map((_, i) => dataObj.pieColors[i] || PIE_COLORS[i % PIE_COLORS.length]);
+
+        const wrap = document.createElement('div');
+        wrap.className = 'd-flex gap-3 flex-wrap both-pie-canvases';
+
+        dataObj.file_keys.forEach((fileKey, fi) => {
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'text-center flex-fill';
+
+            if (dataObj.file_keys.length > 1) {
+                const lbl = document.createElement('div');
+                lbl.className = 'fw-medium mb-1 ui-system-font small';
+                lbl.textContent = dataObj.file_labels[fileKey];
+                itemDiv.appendChild(lbl);
+            }
+
+            const counts = activeData.map(r => r.counts[fileKey] || 0);
+            const total = counts.reduce((a, b) => a + b, 0);
+            const nonZero = counts.filter(v => v > 0).length;
+
+            if (nonZero > MAX_PIE) {
+                const msg = document.createElement('p');
+                msg.className = 'text-muted small py-3';
+                msg.textContent = `Слишком много вариантов (${nonZero}) для круговой диаграммы`;
+                itemDiv.appendChild(msg);
+            } else {
+                const pieCanvas = document.createElement('canvas');
+                pieCanvas.id = `both_pie_canvas_${sourceId}_${fi}`;
+                pieCanvas.width = 380;
+                pieCanvas.height = 380;
+                itemDiv.appendChild(pieCanvas);
+
+                const ctx = pieCanvas.getContext('2d');
+                window.charts[`both_pie_${sourceId}_${fi}`] = new Chart(ctx, {
+                    type: 'pie',
+                    data: { labels: pieLabels, datasets: [{ data: counts, backgroundColor: colors, borderWidth: 1 }] },
+                    options: {
+                        responsive: false,
+                        plugins: {
+                            legend: {
+                                display: dataObj.options.showLegend !== false,
+                                position: 'bottom',
+                                labels: { font: { family: '"Times New Roman", Times, serif', size: 11 } }
+                            },
+                            tooltip: {
+                                enabled: true, displayColors: false,
+                                callbacks: {
+                                    title: (items) => activeData[items[0].dataIndex]?.answer || '',
+                                    label: (ctx) => ctx.raw
+                                }
+                            },
+                            datalabels: {
+                                color: '#fff',
+                                font: { family: '"Times New Roman", Times, serif', size: 13, weight: 'bold' },
+                                formatter: (value) => {
+                                    if (total === 0 || value === 0) return '';
+                                    const pct = (value / total) * 100;
+                                    return pct < 1 ? '<1%' : Math.round(pct) + '%';
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            wrap.appendChild(itemDiv);
+        });
+        chartContainer.appendChild(wrap);
+        return;
+    }
+
+    // Для bar/stacked: восстанавливаем одиночный канвас, убираем pie-обёртку
+    if (canvas) {
+        canvas.style.display = '';
+        canvas.closest('.chart-container')?.querySelector('.both-pie-canvases')?.remove();
+    }
     if (!canvas || activeData.length === 0) return;
 
     const fileTotals = {};
@@ -623,51 +721,6 @@ function drawChartForBoth(sourceId, chartType) {
         r.answer.length > 50 ? r.answer.substring(0, 50) + '...' : r.answer
     );
     const isSingleFile = dataObj.file_keys.length === 1;
-
-    // ── Круговая ──────────────────────────────────────────────────────
-    if (chartType === 'pie') {
-        const fk = dataObj.file_keys[0];
-        const counts = activeData.map(r => r.counts[fk] || 0);
-        const total = counts.reduce((a, b) => a + b, 0);
-        const colors = activeData.map((_, i) =>
-            dataObj.pieColors[i] || PIE_COLORS[i % PIE_COLORS.length]
-        );
-        canvas.width = 380;
-        canvas.height = 380;
-        const ctx = canvas.getContext('2d');
-        window.charts[chartKey] = new Chart(ctx, {
-            type: 'pie',
-            data: { labels, datasets: [{ data: counts, backgroundColor: colors, borderWidth: 1 }] },
-            options: {
-                responsive: false,
-                plugins: {
-                    legend: {
-                        display: dataObj.options.showLegend !== false,
-                        position: 'bottom',
-                        labels: { font: { family: '"Times New Roman", Times, serif', size: 11 } }
-                    },
-                    tooltip: {
-                        enabled: true,
-                        displayColors: false,
-                        callbacks: {
-                            title: (items) => activeData[items[0].dataIndex]?.answer || '',
-                            label: (ctx) => ctx.raw
-                        }
-                    },
-                    datalabels: {
-                        color: '#fff',
-                        font: { family: '"Times New Roman", Times, serif', size: 13, weight: 'bold' },
-                        formatter: (value) => {
-                            if (total === 0 || value === 0) return '';
-                            const pct = (value / total) * 100;
-                            return pct < 1 ? '<1%' : Math.round(pct) + '%';
-                        }
-                    }
-                }
-            }
-        });
-        return;
-    }
 
     // ── Накопленная ───────────────────────────────────────────────────
     if (chartType === 'stacked') {
@@ -745,16 +798,35 @@ function drawChartForBoth(sourceId, chartType) {
 
     // ── Столбчатая (bar — по умолчанию) ──────────────────────────────
     const isHorizontal = dataObj.options.chartDirection === 'y';
+
+    const topN = dataObj.options.highlightTop ? Math.min(dataObj.options.topN, activeData.length * dataObj.file_keys.length) : 0;
+    const HIGHLIGHT_COLOR = dataObj.options.highlightColor || '#0d6efd';
+    const DIM_OTHERS = topN > 0 && dataObj.options.dimOthers;
+    const DIM_COLOR = dataObj.options.dimColor || '#6c757d';
+
+    const allBars = [];
+    activeData.forEach(r => {
+        dataObj.file_keys.forEach(fk => {
+            const c = r.counts[fk] || 0;
+            const ft = fileTotals[fk];
+            allBars.push({ answer: r.answer, fileKey: fk, pct: ft > 0 ? c / ft * 100 : 0 });
+        });
+    });
+    allBars.sort((a, b) => b.pct - a.pct);
+    const topBarSet = new Set(allBars.slice(0, topN).map(b => `${b.answer}__${b.fileKey}`));
+
     const datasets = dataObj.file_keys.map(fileKey => {
         const ft = fileTotals[fileKey];
         const rawCounts = activeData.map(r => r.counts[fileKey] || 0);
         return {
             label: dataObj.file_labels[fileKey],
-            backgroundColor: activeData.map((r, barIdx) =>
-                isSingleFile
+            backgroundColor: activeData.map((r, barIdx) => {
+                if (topN > 0 && topBarSet.has(`${r.answer}__${fileKey}`)) return HIGHLIGHT_COLOR;
+                if (DIM_OTHERS) return DIM_COLOR;
+                return isSingleFile
                     ? (dataObj.barColors[barIdx] || PIE_COLORS[barIdx % PIE_COLORS.length])
-                    : dataObj.file_colors[fileKey]
-            ),
+                    : dataObj.file_colors[fileKey];
+            }),
             data: rawCounts.map(c => ft > 0 ? (c / ft) * 100 : 0),
             rawCounts,
             barPercentage: 0.8
@@ -1280,10 +1352,25 @@ document.addEventListener('change', (e) => {
         renderTable(e.target.dataset.id);
     }
     if (e.target.classList.contains('setting-highlight-top')) {
-        window.appData[e.target.dataset.id].options.highlightTop = e.target.checked;
-        drawChart(e.target.dataset.id);
-        renderTable(e.target.dataset.id);
-        _refreshBothChartIfNeeded(e.target.dataset.id);
+        const id = e.target.dataset.id;
+        window.appData[id].options.highlightTop = e.target.checked;
+        const settEl = document.getElementById(`settings_${id}`);
+        const tabsEl = document.getElementById(`tabs_${id}`);
+        const activeTab = tabsEl?.querySelector('.viz-tab-btn.active')?.dataset?.tab;
+        settEl?.querySelector('.setting-dim-others-group')?.classList.toggle('d-none', !e.target.checked || activeTab !== 'bar');
+        drawChart(id);
+        renderTable(id);
+        _refreshBothChartIfNeeded(id);
+    }
+    if (e.target.classList.contains('setting-dim-others')) {
+        const id = e.target.dataset.id;
+        window.appData[id].options.dimOthers = e.target.checked;
+        drawChart(id);
+    }
+    if (e.target.classList.contains('setting-dim-color')) {
+        const id = e.target.dataset.id;
+        window.appData[id].options.dimColor = e.target.value;
+        if (window.appData[id].options.dimOthers) drawChart(id);
     }
     if (e.target.classList.contains('setting-table-vertical')) {
         const id = e.target.dataset.id;

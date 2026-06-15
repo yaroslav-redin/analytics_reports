@@ -48,9 +48,14 @@ class ExportQuestion(BaseModel):
     hidden_col: str = 'none'             
     skip_analytics: bool = False
     both_chart_type: str = 'bar'
-    pie_colors: List[str] = []       
-    bar_colors: List[str] = []       
-    file_colors: Dict[str, str] = {}  
+    pie_colors: List[str] = []
+    bar_colors: List[str] = []
+    file_colors: Dict[str, str] = {}
+    highlight_top: bool = False
+    top_n: int = 1
+    highlight_color: str = '#dc3545'
+    dim_others: bool = False
+    dim_color: str = '#6c757d'
 
 class ExportDocxRequest(BaseModel):
     questions: List[ExportQuestion]

@@ -174,6 +174,11 @@ async function _doExport() {
                 pie_colors: _collectColorsForActive(dataObj, dataObj.pieColors),
                 bar_colors: _collectColorsForActive(dataObj, dataObj.barColors),
                 file_colors: dataObj.file_colors || {},
+                highlight_top: opts.highlightTop === true,
+                top_n: opts.topN || 1,
+                highlight_color: opts.highlightColor || '#dc3545',
+                dim_others: opts.dimOthers === true,
+                dim_color: opts.dimColor || '#6c757d',
             });
         }
     }
@@ -228,6 +233,11 @@ async function _doExport() {
             pie_colors: _collectColorsForActive(dataObj, dataObj.pieColors),
             bar_colors: _collectColorsForActive(dataObj, dataObj.barColors),
             file_colors: dataObj.file_colors || {},
+            highlight_top: opts.highlightTop === true,
+            top_n: opts.topN || 1,
+            highlight_color: opts.highlightColor || '#dc3545',
+            dim_others: opts.dimOthers === true,
+            dim_color: opts.dimColor || '#6c757d',
         });
     }
 

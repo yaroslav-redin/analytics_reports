@@ -393,7 +393,7 @@ async def process_sheets(request: Request, body: ProcessSheetsRequest):
             clean_filepath = os.path.join(session_path, clean_filename)
             df_clean.to_parquet(clean_filepath, index=False)
 
-            groups = get_column_groups(df_clean.columns)
+            groups = get_column_groups(df_clean.columns, df_clean)
             columns_data = [{"name": q, "is_system": is_system_column(q)} for q in groups.keys()]
 
             response_data.append({
