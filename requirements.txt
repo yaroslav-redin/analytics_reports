@@ -7,7 +7,7 @@ openpyxl
 pyarrow
 python-docx
 python-dotenv
-openai
+gigachat
 httpx
 itsdangerous
 aiosqlite

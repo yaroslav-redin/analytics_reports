@@ -68,7 +68,7 @@ cp .env.example .env
 nano .env
 ```
 
-Заполнить все переменные (OAuth-ключи, OpenRouter API-ключ и т.д.).
+Заполнить все переменные (OAuth-ключи, GigaChat Authorization key и т.д.).
 
 Управление в nano: редактируй → `Ctrl+O` → Enter → `Ctrl+X`.
 
@@ -165,3 +165,39 @@ sudo systemctl stop analytics_reports
 
 # Использование памяти
 free -h
+```
+
+---
+
+## 10. Автообновление сертификата НУЦ Минцифры
+
+`certs/russian_trusted_ca_bundle.pem` содержит Root и Sub CA сертификаты НУЦ Минцифры (нужны для TLS к GigaChat API). Root действует до 2032, Sub CA — до 2027-03-06.
+
+Скрипт `scripts/check_ca_cert_expiry.sh` раз в день проверяет остаток срока Sub CA:
+- если больше 60 дней — ничего не делает и ничего не пишет в лог (место на диске ограничено);
+- если меньше — скачивает свежий Sub CA с `gu-st.ru` и **проверяет его подпись против уже закоммиченного Root CA** (`openssl verify`); подделать эту подпись без приватного ключа Root CA невозможно, поэтому неважно, кто инициирует загрузку — скрипт или человек;
+- если подпись верна и это действительно новый сертификат — заменяет `certs/russian_trusted_ca_bundle.pem` и перезапускает `analytics_reports.service` (лог — одна строка);
+- если подпись не проходит проверку (сеть отдала не то) — файл НЕ трогает, пишет ошибку в лог и завершается с ошибкой (юнит будет виден как `failed`).
+
+Root CA сам не обновляется (действует до 2032) — если Минцифры когда-нибудь переиздадут и его, это отдельная ручная операция.
+
+Установка (один раз на сервере, юнит выполняется от root — нужно для перезаписи `certs/` и перезапуска `analytics_reports.service`):
+
+```bash
+cd ~/analytics_reports
+chmod +x scripts/check_ca_cert_expiry.sh
+sudo cp scripts/analytics_reports-cert-check.service /etc/systemd/system/
+sudo cp scripts/analytics_reports-cert-check.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now analytics_reports-cert-check.timer
+```
+
+Если путь к проекту не `/home/ubuntu/analytics_reports` — поправь `WorkingDirectory=`/`ExecStart=` в `/etc/systemd/system/analytics_reports-cert-check.service` (`sudo nano ...`) перед `daemon-reload`.
+
+Проверить вручную:
+
+```bash
+sudo systemctl start analytics_reports-cert-check.service
+sudo systemctl status analytics_reports-cert-check.service   # OK если "success"/неактивен без ошибки
+sudo journalctl -u analytics_reports-cert-check.service -n 20   # что-то появится только если сертификат обновился или найдена ошибка
+```

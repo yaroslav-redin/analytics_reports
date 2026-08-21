@@ -7,7 +7,7 @@
 - **Бэкенд:** Python 3.10+, FastAPI, Pandas, python-docx
 - **Фронтенд:** Bootstrap 5, Chart.js, SortableJS (без шага сборки)
 - **Авторизация:** OAuth 2.0 через ЭИОС МГУ им. Огарёва (`p.mrsu.ru`)
-- **ИИ:** OpenRouter API (совместим с OpenAI SDK)
+- **ИИ:** GigaChat API (Сбер)
 
 ## Требования
 
@@ -31,7 +31,7 @@ pip install -r requirements.txt
 
 # 4. Настроить переменные окружения
 cp .env.example .env
-# Отредактировать .env — указать EIOS_CLIENT_ID, EIOS_CLIENT_SECRET, OPENROUTER_API_KEY
+# Отредактировать .env — указать EIOS_CLIENT_ID, EIOS_CLIENT_SECRET, GIGACHAT_CREDENTIALS
 
 # 5. Запустить сервер (порт 64548 зарегистрирован в ЭИОС OAuth)
 uvicorn app.main:app --reload --port 64548
@@ -49,7 +49,11 @@ uvicorn app.main:app --reload --port 64548
 | `EIOS_CLIENT_SECRET` | Секрет приложения в OAuth ЭИОС |
 | `EIOS_REDIRECT_URI` | URI обратного вызова |
 | `SESSION_SECRET_KEY` | Произвольная строка для подписи сессионных cookies |
-| `OPENROUTER_API_KEY` | Ключ OpenRouter для ИИ-группировки ответов |
+| `GIGACHAT_CREDENTIALS` | Authorization key GigaChat (из личного кабинета developers.sber.ru) — без него ИИ-функции недоступны |
+| `GIGACHAT_SCOPE` | `GIGACHAT_API_PERS` (физлицо, по умолчанию) / `GIGACHAT_API_B2B` / `GIGACHAT_API_CORP` |
+| `GIGACHAT_MODEL` | Модель GigaChat, например `GigaChat-2`; список доступных моделей зависит от тарифа |
+
+TLS-соединение с GigaChat API проверяется по сертификату НУЦ Минцифры, который уже лежит в репозитории (`certs/russian_trusted_ca_bundle.pem`) — отдельно ничего скачивать не нужно. На проде этот сертификат автообновляется systemd-таймером, см. [DEPLOY.md](DEPLOY.md#10-автообновление-сертификата-нуц-минцифры).
 
 ## Рабочий процесс (6 шагов)
 

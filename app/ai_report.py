@@ -3,9 +3,10 @@ import re
 import hashlib
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from gigachat.exceptions import RateLimitError
 from app import config as cfg
 from app.docx_gen import (
-    get_openrouter_client,
+    _chat_completion,
     _pace,
     _mark_request_done,
     _backoff_wait,
@@ -51,7 +52,7 @@ def _grouping_cache_key(unique_answers: list[str], question_name: str) -> str:
         {
             "answers":  sorted(unique_answers),
             "q":        question_name,
-            "model":    cfg.get("openrouter_model"),
+            "model":    cfg.get("gigachat_model"),
             "prompt":   hashlib.md5(cfg.get("prompt_grouping").encode()).hexdigest(),
         },
         ensure_ascii=False,
@@ -68,26 +69,24 @@ def _normalize_batch(batch_answers: list[str], question_name: str) -> dict[str, 
     Возвращает {original_answer: normalized_answer}.
     """
     prompt = _build_group_prompt(batch_answers, question_name)
-    client = get_openrouter_client()
 
     _pace()
     for attempt in range(6):
         try:
-            response = client.chat.completions.create(
-                model=cfg.get("openrouter_model"),
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=cfg.get_int("llm_max_tokens_grouping"),
-                temperature=cfg.get_float("llm_temperature"),
+            text = _chat_completion(
+                [{"role": "user", "content": prompt}],
+                cfg.get_int("llm_max_tokens_grouping"),
+                cfg.get_float("llm_temperature"),
             )
             _mark_request_done()
-            parsed = _extract_json(response.choices[0].message.content.strip())
+            parsed = _extract_json(text)
             # ключи парсера — строки "1", "2", ... в пределах батча
             return {
                 ans: parsed.get(str(i + 1), ans)
                 for i, ans in enumerate(batch_answers)
             }
-        except Exception as e:
-            if "429" in str(e) and attempt < 5:
+        except RateLimitError:
+            if attempt < 5:
                 _backoff_wait(attempt)
             else:
                 raise
@@ -135,7 +134,7 @@ def _normalize_in_parallel(
 
 # ===================== ПУБЛИЧНАЯ ТОЧКА ВХОДА =====================
 
-def group_answers_openrouter(
+def group_answers_llm(
     answers: list,
     question_name: str,
     cancel_event: threading.Event | None = None,
