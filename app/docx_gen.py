@@ -5,7 +5,8 @@ import re
 import json
 import hashlib
 import threading
-from openai import OpenAI
+from gigachat import GigaChat
+from gigachat.exceptions import RateLimitError
 from docx import Document
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
@@ -31,7 +32,7 @@ def _cache_key(q: dict, sec_name: str, sec_desc: str) -> str:
             "rows":  q.get("rows"),
             "sec":   sec_name,
             "desc":  sec_desc,
-            "model": cfg.get("openrouter_model"),
+            "model": cfg.get("gigachat_model"),
             # включаем стиль/правила в ключ — при правке промпта кэш инвалидируется
             "style": hashlib.md5(cfg.get("prompt_style_example").encode()).hexdigest(),
             "rules": hashlib.md5(cfg.get("prompt_writing_rules").encode()).hexdigest(),
@@ -45,25 +46,40 @@ def _cache_key(q: dict, sec_name: str, sec_desc: str) -> str:
 
 # ===================== SINGLETON КЛИЕНТ И PACING =====================
 
-_openrouter_client: OpenAI | None = None
-_openrouter_client_key: str = ""
-_LAST_REQUEST_TIME: float = 0.0
+_gigachat_client: GigaChat | None = None
+_gigachat_client_key: str = ""
 
 
-def get_openrouter_client() -> OpenAI:
-    """Один TCP-клиент на всё приложение. Пересоздаётся, если ключ изменился через настройки."""
-    global _openrouter_client, _openrouter_client_key
-    key = cfg.get("openrouter_api_key")
-    if not key:
-        raise ValueError("OPENROUTER_API_KEY не задан (проверьте .env или Настройки)")
-    if _openrouter_client is None or _openrouter_client_key != key:
-        _openrouter_client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=key,
+def get_gigachat_client() -> GigaChat:
+    """Один клиент на всё приложение. Пересоздаётся, если ключ изменился через настройки."""
+    global _gigachat_client, _gigachat_client_key
+    credentials = cfg.get("gigachat_credentials")
+    if not credentials:
+        raise ValueError("GIGACHAT_CREDENTIALS не задан (проверьте .env или Настройки)")
+    if _gigachat_client is None or _gigachat_client_key != credentials:
+        _gigachat_client = GigaChat(
+            credentials=credentials,
+            scope=cfg.get("gigachat_scope"),
+            ca_bundle_file=cfg.get("gigachat_ca_bundle_file") or None,
             timeout=cfg.get_float("llm_request_timeout"),
         )
-        _openrouter_client_key = key
-    return _openrouter_client
+        _gigachat_client_key = credentials
+    return _gigachat_client
+
+
+def _chat_completion(messages: list[dict], max_tokens: int, temperature: float) -> str:
+    """Один вызов чат-модели GigaChat, возвращает текст ответа."""
+    client = get_gigachat_client()
+    response = client.chat({
+        "model": cfg.get("gigachat_model"),
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    })
+    return response.choices[0].message.content.strip()
+
+
+_LAST_REQUEST_TIME: float = 0.0
 
 
 def _pace():
@@ -375,7 +391,6 @@ def _build_question_prompt(
 # ===================== ВЫЗОВ МОДЕЛИ =====================
 
 def _call_llm(prompt: str, system: str = "", max_tokens: int | None = None) -> str:
-    client = get_openrouter_client()
     messages = []
     if system:
         messages.append({"role": "system", "content": system})
@@ -387,16 +402,11 @@ def _call_llm(prompt: str, system: str = "", max_tokens: int | None = None) -> s
     _pace()
     for attempt in range(6):
         try:
-            response = client.chat.completions.create(
-                model=cfg.get("openrouter_model"),
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=cfg.get_float("llm_temperature"),
-            )
+            result = _chat_completion(messages, max_tokens, cfg.get_float("llm_temperature"))
             _mark_request_done()
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            if "429" in str(e) and attempt < 5:
+            return result
+        except RateLimitError:
+            if attempt < 5:
                 _backoff_wait(attempt)
             else:
                 raise
@@ -507,7 +517,7 @@ def _section_conclusion_cache_key(sec_name: str, sec_desc: str, qs: list[dict]) 
                 {"q": q.get("question_name"), "rows": q.get("rows")}
                 for q in qs
             ],
-            "model": cfg.get("openrouter_model"),
+            "model": cfg.get("gigachat_model"),
             "sys":   hashlib.md5(cfg.get("prompt_section_conclusion_system").encode()).hexdigest(),
             "rules": hashlib.md5(cfg.get("prompt_section_conclusion_rules").encode()).hexdigest(),
             "ex":    hashlib.md5(cfg.get("prompt_section_conclusion_example").encode()).hexdigest(),
@@ -692,7 +702,7 @@ def _final_conclusion_cache_key(questions: list[dict]) -> str:
                 }
                 for q in questions
             ],
-            "model": cfg.get("openrouter_model"),
+            "model": cfg.get("gigachat_model"),
             "sys":   hashlib.md5(cfg.get("prompt_final_conclusion_system").encode()).hexdigest(),
             "rules": hashlib.md5(cfg.get("prompt_final_conclusion_rules").encode()).hexdigest(),
             "ex":    hashlib.md5(cfg.get("prompt_final_conclusion_example").encode()).hexdigest(),

@@ -28,7 +28,7 @@ load_dotenv()
 from app.data_logic import clean_dataframe, generate_report_data, get_column_groups, is_system_column
 from app.schemas import ProcessSheetsRequest, AnalyzeRequest, ExportDocxRequest, AiGroupRequest
 from app.docx_gen import generate_analysis_docx
-from app.ai_report import group_answers_openrouter
+from app.ai_report import group_answers_llm
 from app.auth import router as auth_router
 from app.database import (
     DB_PATH, init_db, log_upload_session, log_generated_report,
@@ -173,7 +173,7 @@ async def settings_page(request: Request):
     )
 
 
-_REDACTED_SETTINGS = {"openrouter_api_key"}
+_REDACTED_SETTINGS = {"gigachat_credentials"}
 
 @app.get("/api/settings")
 async def get_settings_api(request: Request):
@@ -427,7 +427,7 @@ async def analyze_data(request: Request, body: AnalyzeRequest):
 @limiter.limit("30/minute")
 async def ai_group_answers(request: Request, body: AiGroupRequest):
     try:
-        groups = group_answers_openrouter(body.answers, body.question_name)
+        groups = group_answers_llm(body.answers, body.question_name)
         return {"groups": groups}
     except Exception:
         _logger.exception("Ошибка ai_group_answers")
@@ -495,7 +495,7 @@ async def ai_group_start(request: Request, body: AiGroupRequest):
 
     def run_group():
         try:
-            groups = group_answers_openrouter(answers, question_name, cancel_event=task.cancel_event)
+            groups = group_answers_llm(answers, question_name, cancel_event=task.cancel_event)
             if task.cancel_event.is_set():
                 task._finish("cancelled", error="Группировка отменена пользователем")
             else:

@@ -50,12 +50,12 @@
 | Обработка данных | Pandas, PyArrow (Parquet) |
 | База данных | SQLite (aiosqlite — асинхронный драйвер) |
 | Аутентификация | OAuth 2.0 через EIOS (p.mrsu.ru) |
-| LLM | OpenRouter API (по умолчанию `meta-llama/llama-3.3-70b-instruct:free`) |
+| LLM | GigaChat API — Сбер (по умолчанию модель `GigaChat-2`) |
 | Генерация Word | python-docx + ручная сборка OOXML-графиков |
 | Фронтенд | Bootstrap 5, Chart.js, Select2, SortableJS |
 | Сессии | Starlette SessionMiddleware (itsdangerous) |
 | Rate limiting | slowapi |
-| HTTP-клиент | httpx (OAuth), openai SDK (OpenRouter) |
+| HTTP-клиент | httpx (OAuth ЭИОС), gigachat SDK (GigaChat) |
 
 ---
 
@@ -82,7 +82,7 @@
 └─────────────────────────────────────────────────────┘
        │                                  │
        ▼                                  ▼
-  SQLite DB                        OpenRouter API
+  SQLite DB                        GigaChat API
   (settings, users,                (LLM-вызовы)
    sessions, reports)
 ```
@@ -112,6 +112,12 @@ survey_analytics_app/
 │   │   └── js/modules/  — ES-модули фронтенда (wizard, upload, sheets, …)
 │   └── templates/       — Jinja2-шаблоны (index.html, login.html, partials/)
 ├── uploads/             — временные файлы сессий (очищаются через 6 ч)
+├── certs/
+│   └── russian_trusted_ca_bundle.pem  — Root + Sub CA НУЦ Минцифры для TLS к GigaChat
+├── scripts/
+│   ├── check_ca_cert_expiry.sh              — автообновление Sub CA (см. §12)
+│   ├── analytics_reports-cert-check.service — systemd-юнит для скрипта выше
+│   └── analytics_reports-cert-check.timer   — ежедневный таймер
 ├── survey_analytics.db  — SQLite-база данных
 ├── requirements.txt
 ├── .env                 
@@ -126,7 +132,7 @@ survey_analytics_app/
 
 - Python 3.11+
 - Зарегистрированный OAuth-клиент в EIOS (`p.mrsu.ru`)
-- API-ключ OpenRouter (для LLM-функций)
+- Authorization key GigaChat (для LLM-функций), получается в личном кабинете developers.sber.ru
 
 ### Установка
 
@@ -167,12 +173,14 @@ uvicorn app.main:app --reload --port 64548
 | `EIOS_REDIRECT_URI` | нет | Callback-URL; по умолчанию `http://localhost:64548/signin-eios` |
 | `EIOS_ALLOWED_ROLE` | нет | Если задана — пускать только пользователей с этой ролью |
 | `ADMIN_USER_IDS` | нет | Comma-separated EIOS-ID пользователей, которым сразу даётся is_admin |
-| `OPENROUTER_API_KEY` | нет* | Ключ OpenRouter; без него LLM-функции недоступны |
-| `OPENROUTER_MODEL` | нет | Модель OpenRouter; по умолчанию `meta-llama/llama-3.3-70b-instruct:free` |
+| `GIGACHAT_CREDENTIALS` | нет* | Authorization key GigaChat; без него LLM-функции недоступны |
+| `GIGACHAT_SCOPE` | нет | `GIGACHAT_API_PERS` (физлицо) / `GIGACHAT_API_B2B` / `GIGACHAT_API_CORP`; по умолчанию `GIGACHAT_API_PERS` |
+| `GIGACHAT_MODEL` | нет | Модель GigaChat; по умолчанию `GigaChat-2`. Доступные модели зависят от тарифа — список: `client.get_models()` |
+| `GIGACHAT_CA_BUNDLE_FILE` | нет | Путь к сертификатам НУЦ Минцифры; по умолчанию `certs/russian_trusted_ca_bundle.pem` (входит в репозиторий) |
 | `DB_PATH` | нет | Путь к SQLite-файлу; по умолчанию `survey_analytics.db` |
 | `HTTPS_ONLY` | нет | `true` — cookie `Secure`; для продакшена через HTTPS |
 
-\* Без `OPENROUTER_API_KEY` кнопки «Группировать ИИ» и генерация аналитического текста вернут ошибку, но остальные функции работают.
+\* Без `GIGACHAT_CREDENTIALS` кнопки «Группировать ИИ» и генерация аналитического текста вернут ошибку, но остальные функции работают.
 
 ---
 
@@ -459,22 +467,37 @@ data: {"type": "error", "message": "Текст ошибки"}
 
 ### Клиент (`app/docx_gen.py`)
 
-Singleton `OpenAI`-клиент, настроенный на OpenRouter:
+Singleton `GigaChat`-клиент (пакет `gigachat`), аутентификация по Authorization key через OAuth2:
 
 ```python
-OpenAI(
-    api_key=cfg.get("openrouter_api_key"),
-    base_url="https://openrouter.ai/api/v1",
+GigaChat(
+    credentials=cfg.get("gigachat_credentials"),
+    scope=cfg.get("gigachat_scope"),
+    ca_bundle_file=cfg.get("gigachat_ca_bundle_file"),
     timeout=cfg.get_int("llm_request_timeout"),
 )
 ```
 
-Пересоздаётся автоматически при изменении ключа через настройки.
+Пересоздаётся автоматически при изменении ключа через настройки. TLS проверяется по сертификату НУЦ Минцифры (`certs/russian_trusted_ca_bundle.pem`, входит в репозиторий). Токен доступа (TTL ~30 мин) обновляется библиотекой автоматически.
+
+Вызовы идут через общую обёртку `_chat_completion(messages, max_tokens, temperature)`, которая использует совместимый со старым форматом метод `client.chat({...})` и возвращает `response.choices[0].message.content`.
+
+### Сертификат НУЦ Минцифры и его автообновление
+
+`certs/russian_trusted_ca_bundle.pem` содержит два сертификата: Root CA (действует до 2032, самоподписанный, служит корнем доверия) и Sub CA (действует до 2027-03-06, именно им подписаны серверные сертификаты `api.giga.chat`).
+
+Скрипт `scripts/check_ca_cert_expiry.sh`, запускаемый ежедневным systemd-таймером на проде (см. `DEPLOY.md` §10), обновляет только Sub CA:
+1. Если до истечения текущего Sub CA ≥ 60 дней — ничего не делает (без записи в лог, чтобы не расходовать место на диске).
+2. Иначе скачивает свежий Sub CA с `gu-st.ru` и проверяет его подпись через `openssl verify -CAfile <Root CA>` — то есть криптографически убеждается, что новый сертификат действительно выпущен тем же Root CA, которому мы уже доверяем. Подделать эту подпись без приватного ключа НУЦ Минцифры невозможно, поэтому проверка одинаково надёжна независимо от того, кто инициировал загрузку.
+3. Если подпись верна и сертификат отличается от текущего — атомарно заменяет `certs/russian_trusted_ca_bundle.pem` и перезапускает `analytics_reports.service`.
+4. Если подпись не проходит проверку (сеть отдала не то, что нужно) — файл не трогает, пишет ошибку в лог и завершается с ошибкой (юнит виден как `failed`).
+
+Root CA автообновлением не покрыт — он действует до 2032, и это осознанное решение: обновление корня доверия должно быть отдельной ручной операцией (заменить файл, проверить отпечаток по независимому источнику, закоммитить), а не автоматическим шагом.
 
 ### Управление темпом запросов
 
 - **`_pace()`** — добавляет паузу `llm_sleep_between_calls` секунд между вызовами.
-- **`_backoff_wait(attempt)`** — экспоненциальный backoff при HTTP 429: `2^attempt * (1 + random) * 3` секунды.
+- **`_backoff_wait(attempt)`** — экспоненциальный backoff при `gigachat.exceptions.RateLimitError`: `2^attempt * (1 + random) * 3` секунды.
 - Максимум 6 попыток на один вызов.
 
 ### Группировка ответов (`app/ai_report.py`)
@@ -539,7 +562,7 @@ OpenAI(
 ### Доступ к настройкам
 
 ```python
-cfg.get("openrouter_model")          # → str
+cfg.get("gigachat_model")            # → str
 cfg.get_int("llm_max_tokens_analysis")  # → int
 cfg.get_float("llm_temperature")     # → float
 cfg.get_json("pie_colors")           # → list/dict
@@ -549,7 +572,8 @@ cfg.get_json("pie_colors")           # → list/dict
 
 | Ключ | По умолчанию | Описание |
 |------|-------------|---------|
-| `openrouter_model` | `meta-llama/llama-3.3-70b-instruct:free` | Модель LLM |
+| `gigachat_model` | `GigaChat-2` | Модель LLM |
+| `gigachat_scope` | `GIGACHAT_API_PERS` | Тип доступа (физлицо/юрлицо) |
 | `llm_temperature` | `0.4` | Температура генерации |
 | `llm_max_tokens_analysis` | `600` | Макс. токенов на аналитический абзац |
 | `llm_max_tokens_grouping` | `2000` | Макс. токенов на группировку |
@@ -565,7 +589,7 @@ cfg.get_json("pie_colors")           # → list/dict
 | `pie_colors` | 25 цветов | Палитра круговых диаграмм |
 | `default_file_colors` | 10 цветов | Цвета файлов для столбчатых диаграмм |
 
-Администраторы изменяют настройки через интерфейс `/settings`. Изменения применяются немедленно (обновляется `_cache`) без перезапуска сервера. Исключение — новый API-ключ OpenRouter: singleton-клиент пересоздаётся при следующем вызове.
+Администраторы изменяют настройки через интерфейс `/settings`. Изменения применяются немедленно (обновляется `_cache`) без перезапуска сервера. Исключение — новый ключ GigaChat: singleton-клиент пересоздаётся при следующем вызове.
 
 ---
 
@@ -834,7 +858,7 @@ cfg.get_json("pie_colors")           # → list/dict
 
 #### Зависимости от `docx_gen.py`
 
-`get_openrouter_client`, `_pace`, `_mark_request_done`, `_backoff_wait` импортированы напрямую — singleton-клиент и управление темпом общие для всего приложения.
+`_chat_completion`, `_pace`, `_mark_request_done`, `_backoff_wait` импортированы напрямую — singleton-клиент и управление темпом общие для всего приложения.
 
 #### `_extract_json(text) → dict`
 
@@ -854,13 +878,13 @@ MD5 от `{answers, question_name, model, prompt_hash}`. При изменени
 
 #### `_normalize_batch(batch_answers, question_name) → dict[str, str]`
 
-Один LLM-вызов на батч. До 6 попыток с backoff при HTTP 429. Возвращает `{оригинал: нормализованный}`.
+Один LLM-вызов на батч. До 6 попыток с backoff при `RateLimitError`. Возвращает `{оригинал: нормализованный}`.
 
 #### `_normalize_in_parallel(batches, question_name, cancel_event) → dict[str, str]`
 
 `ThreadPoolExecutor(max_workers=llm_group_max_concurrency)`. Параллельно нормализует батчи. При ошибке в любом батче — пробрасывает первую (`all-or-nothing`). Проверяет `cancel_event`.
 
-#### `group_answers_openrouter(answers, question_name, cancel_event) → list[dict]`
+#### `group_answers_llm(answers, question_name, cancel_event) → list[dict]`
 
 Публичная точка входа:
 1. Дедупликация: `list(dict.fromkeys(answers_str))`.
@@ -878,8 +902,11 @@ MD5 от `{answers, question_name, model, prompt_hash}`. При изменени
 
 #### Singleton и управление темпом
 
-**`get_openrouter_client() → OpenAI`**  
-Один TCP-клиент на весь процесс. Пересоздаётся при изменении `openrouter_api_key` в конфиге. URL: `https://openrouter.ai/api/v1`.
+**`get_gigachat_client() → GigaChat`**  
+Один клиент на весь процесс. Пересоздаётся при изменении `gigachat_credentials` в конфиге. Аутентификация — OAuth2 по Authorization key, TLS — по сертификату НУЦ Минцифры (`gigachat_ca_bundle_file`).
+
+**`_chat_completion(messages, max_tokens, temperature) → str`**  
+Общая обёртка над `client.chat({...})`, возвращает `response.choices[0].message.content`. Используется и в `docx_gen.py`, и (через импорт) в `ai_report.py`.
 
 **`_pace()`**  
 Перед каждым LLM-вызовом: если с предыдущего прошло менее `llm_sleep_between_calls` сек — ждёт остаток. Предотвращает rate-limit при параллельных запросах.

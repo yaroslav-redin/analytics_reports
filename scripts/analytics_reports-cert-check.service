@@ -1,0 +1,9 @@
+[Unit]
+Description=Автообновление Russian Trusted Sub CA для GigaChat
+
+[Service]
+# Root нужен, чтобы перезаписать certs/*.pem (принадлежит ubuntu) и
+# перезапустить analytics_reports.service при обновлении сертификата.
+Type=oneshot
+WorkingDirectory=/home/ubuntu/analytics_reports
+ExecStart=/home/ubuntu/analytics_reports/scripts/check_ca_cert_expiry.sh

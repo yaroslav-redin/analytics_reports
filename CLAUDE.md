@@ -23,10 +23,16 @@ FastAPI-приложение для отдела анкетирования МГ
 1. `POST /upload` — сохраняет файлы в `uploads/{session_id}/`, удаляет предыдущие сессии пользователя
 2. `POST /process_sheets` — очищает DataFrame, сохраняет как Parquet в папку сессии
 3. `POST /analyze` — читает Parquet, агрегирует счётчики ответов, возвращает JSON
-4. `POST /ai_group_answers` — LLM нормализует свободные ответы (OpenRouter)
+4. `POST /ai_group_answers` — LLM нормализует свободные ответы (GigaChat)
 5. `POST /export_docx_start` — запускает фоновый поток генерации, возвращает `task_id`
 6. `GET /export_docx_stream/{task_id}` — SSE-подписка на прогресс; клиент получает snapshot + live-обновления
 7. `POST /export_docx_cancel/{task_id}` — запрашивает отмену через `threading.Event`
+
+Шаг 4 (ИИ-группировка) использует отдельный набор эндпоинтов с тем же паттерном фоновой задачи, что и экспорт, но с собственным in-memory словарём и очисткой через 10 минут: `POST /ai_group_start`, `GET /ai_group_result/{task_id}`, `POST /ai_group_cancel/{task_id}`.
+
+Авторизация и админ-функции вынесены в отдельные группы эндпоинтов: `auth.py` — `GET /auth/login`, `GET /signin-eios`, `GET /auth/logout`, `GET /auth/me`; `main.py` — `GET /login`, `GET /`, `GET /users`, `GET /settings`, `GET /api/settings`, `POST /api/settings`, `GET /api/settings/defaults`, `POST /api/users/{user_id}/set_admin`, `POST /api/users/{user_id}/set_banned`.
+
+Большинство POST-эндпоинтов ограничены через `slowapi` (`Limiter(key_func=get_remote_address)`, лимиты 5–30 запросов/мин в зависимости от эндпоинта) — при отладке частых повторных запросов в dev-режиме учитывайте возможный HTTP 429.
 
 Файлы сессии автоматически удаляются через 6 часов фоновым asyncio-циклом в `app/main.py`.
 
@@ -43,7 +49,7 @@ FastAPI-приложение для отдела анкетирования МГ
 | `app/config.py` | Настройки: in-memory кэш поверх таблицы SQLite `settings`; `await cfg.load(db_path)` при старте |
 | `app/data_logic.py` | Очистка DataFrame (удаление числовых префиксов, нормализация возраста, определение системных столбцов) и агрегация ответов |
 | `app/ai_report.py` | Группировка ответов через LLM: дедупликация → батчинг (50/батч) → параллельный ThreadPoolExecutor (макс. 3) → in-memory кэш по хэшу содержимого |
-| `app/docx_gen.py` | Экспорт в Word: параллельный LLM-анализ (ThreadPoolExecutor + семафор) → OOXML-графики → один выходной файл (аналитика); содержит singleton OpenRouter клиент, `_pace()` и `_backoff_wait()` для rate limit |
+| `app/docx_gen.py` | Экспорт в Word: параллельный LLM-анализ (ThreadPoolExecutor + семафор) → OOXML-графики → один выходной файл (аналитика); содержит singleton GigaChat клиент, `_pace()` и `_backoff_wait()` для rate limit |
 | `app/chart_gen.py` | Строит редактируемые OOXML-графики (столбчатые/круговые/таблицы), встроенные в .docx со связанными данными Excel |
 | `app/database.py` | Прямые aiosqlite-запросы; таблицы: `settings`, `users`, `upload_sessions`, `generated_reports` |
 | `app/schemas.py` | Pydantic-модели запросов и ответов |
@@ -70,7 +76,7 @@ FastAPI-приложение для отдела анкетирования МГ
 
 ### Интеграция с LLM
 
-`docx_gen.py` содержит singleton `OpenAI`-клиент (`get_openrouter_client()`), функции `_pace()` (адаптивная пауза между запросами) и `_backoff_wait()` (экспоненциальный backoff при HTTP 429). Эти функции импортируются в `ai_report.py`. Результаты кэшируются in-memory на время жизни процесса (сбрасываются при перезапуске). Промпты хранятся в таблице `settings` БД и редактируются через `/settings`.
+`docx_gen.py` содержит singleton `GigaChat`-клиент (`get_gigachat_client()`), общую функцию `_chat_completion()`, `_pace()` (адаптивная пауза между запросами) и `_backoff_wait()` (экспоненциальный backoff при `gigachat.exceptions.RateLimitError`). Эти функции импортируются в `ai_report.py`. Результаты кэшируются in-memory на время жизни процесса (сбрасываются при перезапуске). Промпты хранятся в таблице `settings` БД и редактируются через `/settings`. Аутентификация — OAuth2 по Authorization key (`gigachat_credentials`), TLS проверяется по сертификату НУЦ Минцифры (`certs/russian_trusted_ca_bundle.pem`).
 
 ### Встраивание OOXML-графиков
 
@@ -83,5 +89,7 @@ FastAPI-приложение для отдела анкетирования МГ
 ### Внешние зависимости
 
 - **EIOS OAuth** — университетский SSO на `https://p.mrsu.ru`; захардкожен в `auth.py`
-- **OpenRouter** — LLM API; по умолчанию `meta-llama/llama-3.3-70b-instruct:free`
+- **GigaChat** (Сбер) — LLM API; по умолчанию модель `GigaChat-2`, доступ через Authorization key (`gigachat_credentials`), TLS — сертификат НУЦ Минцифры (`certs/russian_trusted_ca_bundle.pem`; Sub CA истекает 2027-03-06, автообновляется ежедневным systemd-таймером `scripts/check_ca_cert_expiry.sh` с проверкой подписи против Root CA перед заменой, см. DEPLOY.md §10)
 - **SQLite** — `survey_analytics.db` (путь переопределяется через `$DB_PATH`)
+
+Прочие переменные окружения из `.env.example`: `ADMIN_USER_IDS` (список ID пользователей ЭИОС, получающих права администратора при первом входе), `EIOS_ALLOWED_ROLE`, `HTTPS_ONLY`, `SESSION_SECRET_KEY`, `LLM_REQUEST_TIMEOUT`, `LLM_GROUP_BATCH_SIZE`, `LLM_GROUP_MAX_CONCURRENCY`, `GIGACHAT_SCOPE`, `GIGACHAT_CA_BUNDLE_FILE`.

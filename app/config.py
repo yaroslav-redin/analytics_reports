@@ -162,8 +162,10 @@ _GROUPING_PROMPT = """\
 
 DEFAULTS: dict = {
     # LLM
-    "openrouter_api_key":        os.getenv("OPENROUTER_API_KEY", ""),
-    "openrouter_model":          os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free"),
+    "gigachat_credentials":      os.getenv("GIGACHAT_CREDENTIALS", ""),
+    "gigachat_scope":            os.getenv("GIGACHAT_SCOPE", "GIGACHAT_API_PERS"),
+    "gigachat_model":            os.getenv("GIGACHAT_MODEL", "GigaChat-2"),
+    "gigachat_ca_bundle_file":   os.getenv("GIGACHAT_CA_BUNDLE_FILE", "certs/russian_trusted_ca_bundle.pem"),
     "llm_max_tokens_analysis":          "600",
     "llm_max_tokens_grouping":          "2000",
     "llm_max_tokens_section_conclusion": "800",

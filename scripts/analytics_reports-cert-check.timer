@@ -1,0 +1,9 @@
+[Unit]
+Description=Ежедневная проверка срока действия Russian Trusted Sub CA
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target

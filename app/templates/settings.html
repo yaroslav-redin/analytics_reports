@@ -56,8 +56,8 @@
                             <h6 class="fw-semibold mb-3">LLM и API</h6>
                             <div class="mb-3">
                                 <label class="settings-label">ID модели</label>
-                                <input type="text" class="form-control form-control-sm font-monospace" id="s_openrouter_model" placeholder="meta-llama/llama-3.3-70b-instruct:free">
-                                <div class="settings-hint">Список моделей: <a href="https://openrouter.ai/models" target="_blank">openrouter.ai/models</a></div>
+                                <input type="text" class="form-control form-control-sm font-monospace" id="s_gigachat_model" placeholder="GigaChat-2">
+                                <div class="settings-hint">Модели: GigaChat, GigaChat-Pro, GigaChat-Max — см. <a href="https://developers.sber.ru/docs/ru/gigachat/models" target="_blank">developers.sber.ru</a></div>
                             </div>
                             <div class="row g-3">
                                 <div class="col-sm-4">
@@ -367,7 +367,7 @@ async function loadSettings() {
     const s = await res.json();
     _defaults = s;
 
-    document.getElementById('s_openrouter_model').value = s.openrouter_model || '';
+    document.getElementById('s_gigachat_model').value = s.gigachat_model || '';
     document.getElementById('s_llm_temperature').value = s.llm_temperature || '';
     document.getElementById('s_llm_max_tokens_analysis').value = s.llm_max_tokens_analysis || '';
     document.getElementById('s_llm_max_tokens_grouping').value = s.llm_max_tokens_grouping || '';
@@ -412,7 +412,7 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     );
 
     const payload = {
-        openrouter_model:         document.getElementById('s_openrouter_model').value,
+        gigachat_model:           document.getElementById('s_gigachat_model').value,
         llm_temperature:          document.getElementById('s_llm_temperature').value,
         llm_max_tokens_analysis:  document.getElementById('s_llm_max_tokens_analysis').value,
         llm_max_tokens_grouping:  document.getElementById('s_llm_max_tokens_grouping').value,
