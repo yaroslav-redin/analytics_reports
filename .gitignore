@@ -20,3 +20,5 @@ uploads/
 .DS_Store
 Thumbs.db
 body.json
+CLAUDE.md
+PoolReportApiGuide.md

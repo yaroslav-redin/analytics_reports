@@ -43,6 +43,15 @@ CREATE TABLE IF NOT EXISTS generated_reports (
     generated_at   TEXT DEFAULT (datetime('now')),
     FOREIGN KEY(user_id) REFERENCES users(id)
 );
+
+CREATE TABLE IF NOT EXISTS eios_tokens (
+    user_id       TEXT PRIMARY KEY,
+    access_token  TEXT NOT NULL,
+    refresh_token TEXT NOT NULL DEFAULT '',
+    expires_at    REAL NOT NULL,
+    updated_at    TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY(user_id) REFERENCES users(id)
+);
 """
 
 
@@ -184,4 +193,37 @@ async def cleanup_old_records(session_max_age_hours: int):
             " WHERE generated_at < datetime('now', ? || ' hours')",
             (f"-{session_max_age_hours}",),
         )
+        await db.commit()
+
+
+async def save_eios_tokens(user_id: str, access_token: str, refresh_token: str, expires_at: float) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO eios_tokens (user_id, access_token, refresh_token, expires_at, updated_at)"
+            " VALUES (?, ?, ?, ?, datetime('now'))"
+            " ON CONFLICT(user_id) DO UPDATE SET"
+            "   access_token  = excluded.access_token,"
+            "   refresh_token = excluded.refresh_token,"
+            "   expires_at    = excluded.expires_at,"
+            "   updated_at    = datetime('now')",
+            (user_id, access_token, refresh_token, expires_at),
+        )
+        await db.commit()
+
+
+async def get_eios_tokens(user_id: str) -> Optional[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            "SELECT access_token, refresh_token, expires_at FROM eios_tokens WHERE user_id = ?",
+            (user_id,),
+        ) as cur:
+            row = await cur.fetchone()
+    if row is None:
+        return None
+    return {"access_token": row[0], "refresh_token": row[1], "expires_at": float(row[2])}
+
+
+async def delete_eios_tokens(user_id: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM eios_tokens WHERE user_id = ?", (user_id,))
         await db.commit()

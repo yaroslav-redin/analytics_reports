@@ -21,6 +21,9 @@
                 <button type="submit" form="uploadForm" class="btn btn-primary px-4 nav-fwd-btn" id="uploadBtn" disabled>
                     <i class="fa-solid fa-table-list me-1"></i>Выбрать листы <i class="fa-solid fa-arrow-right ms-2"></i>
                 </button>
+                <button type="button" class="btn btn-primary px-4 nav-fwd-btn d-none" id="eiosToCohortsBtn" disabled>
+                    <i class="fa-solid fa-filter me-1"></i>Настроить выборку <i class="fa-solid fa-arrow-right ms-2"></i>
+                </button>
             </div>
         </div>
         <!-- Шаг 2: листы -->
@@ -29,6 +32,10 @@
                 <div class="spinner-border text-primary d-none spinner-app" id="sheetSpinner"></div>
                 <button type="submit" form="sheetForm" class="btn btn-primary px-4 nav-fwd-btn" id="processSheetsBtn" disabled>
                     <i class="fa-solid fa-list-check me-1"></i>Выбрать вопросы <i class="fa-solid fa-arrow-right ms-2"></i>
+                </button>
+                <div class="spinner-border text-primary d-none spinner-app" id="eiosBuildSpinner"></div>
+                <button type="button" class="btn btn-primary px-4 nav-fwd-btn d-none" id="eiosBuildBtn" disabled>
+                    <i class="fa-solid fa-cloud-arrow-down me-1"></i>Получить данные <i class="fa-solid fa-arrow-right ms-2"></i>
                 </button>
             </div>
         </div>

@@ -341,7 +341,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
     const fileColors = {};
     if (window.processedFiles && window.processedFiles.length === 1) {
         const f = window.processedFiles[0];
-        fileLabels[f.clean_filename] = f.original_name.replace(/\.[^.]+$/, '');
+        fileLabels[f.clean_filename] = f.label || f.original_name.replace(/\.[^.]+$/, '');
         fileColors[f.clean_filename] = defaultColors[0];
     } else {
         document.querySelectorAll('.legend-label').forEach(el => { fileLabels[el.dataset.file] = el.value || el.placeholder; });

@@ -3,6 +3,7 @@ import re
 import os
 from datetime import datetime
 from app import config as cfg
+from app.eios_data import is_eios_cohort_file, load_cohort_counts
 
 def clean_column_name(col_name):
     name = str(col_name).strip()
@@ -134,15 +135,25 @@ def _get_answer_counts(df, q_name, groups_cache):
     counts = counts.groupby('Ответ', as_index=False)['Количество'].sum()
     return counts.set_index('Ответ')['Количество'].to_dict()
 
+def _add_counts(target: dict, source: dict):
+    for ans, cnt in source.items():
+        target[ans] = target.get(ans, 0) + cnt
+
+
 def generate_report_data(upload_dir, request_data):
     file_labels = request_data.file_labels
     file_colors = request_data.file_colors
 
     dfs = {}
     groups_cache = {}
+    eios_counts = {}   # clean_filename когорты ЭИОС → {вопрос: {ответ: количество}}
     for clean_filename in file_labels.keys():
-        filepath = os.path.join(upload_dir, clean_filename)
-        if os.path.exists(filepath):
+        filepath = os.path.join(upload_dir, os.path.basename(clean_filename))
+        if not os.path.exists(filepath):
+            continue
+        if is_eios_cohort_file(clean_filename):
+            eios_counts[clean_filename] = load_cohort_counts(filepath)
+        else:
             df = pd.read_parquet(filepath)
             dfs[clean_filename] = df
             groups_cache[clean_filename] = get_column_groups(df.columns, df)
@@ -152,23 +163,27 @@ def generate_report_data(upload_dir, request_data):
     for cfg in request_data.configs:
         all_answers = set()
         file_counts = {}
+        merged_columns = getattr(cfg, 'merged_columns', [])
 
         for f_name, q_name in cfg.file_mapping.items():
-            if f_name not in dfs:
-                continue
-
-            # Основной вопрос
             combined_counts: dict = {}
-            if q_name in groups_cache[f_name]:
-                combined_counts = _get_answer_counts(dfs[f_name], q_name, groups_cache[f_name])
-
-            # Доноры — ищем в том же файле по имени колонки
-            for donor_name in getattr(cfg, 'merged_columns', []):
-                if donor_name not in groups_cache[f_name]:
-                    continue
-                donor_counts = _get_answer_counts(dfs[f_name], donor_name, groups_cache[f_name])
-                for ans, cnt in donor_counts.items():
-                    combined_counts[ans] = combined_counts.get(ans, 0) + cnt
+            if f_name in eios_counts:
+                source = eios_counts[f_name]
+                _add_counts(combined_counts, source.get(q_name, {}))
+                # Доноры — вопросы той же когорты
+                for donor_name in merged_columns:
+                    _add_counts(combined_counts, source.get(donor_name, {}))
+            elif f_name in dfs:
+                # Основной вопрос
+                if q_name in groups_cache[f_name]:
+                    combined_counts = _get_answer_counts(dfs[f_name], q_name, groups_cache[f_name])
+                # Доноры — ищем в том же файле по имени колонки
+                for donor_name in merged_columns:
+                    if donor_name not in groups_cache[f_name]:
+                        continue
+                    _add_counts(combined_counts, _get_answer_counts(dfs[f_name], donor_name, groups_cache[f_name]))
+            else:
+                continue
 
             if combined_counts:
                 file_counts[f_name] = combined_counts

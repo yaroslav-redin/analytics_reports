@@ -15,7 +15,9 @@
         'questionMerges',
         'questionSourceFile',
         'reportSections',
-        'exportTask',               
+        'exportTask',
+        'dataSource',
+        'eiosSelection',
     ];
     const HEAVY_KEYS = [
         'appData',
@@ -144,6 +146,11 @@
             target = saved.currentStep;
         }
         if (target < 0 || target >= 6) target = 0;
+
+        if (typeof window.rehydrateEiosUI === 'function') {
+            try { window.rehydrateEiosUI(); }
+            catch (e) { console.error('[state] rehydrateEiosUI failed', e); }
+        }
 
 
         if (window.uploadedFiles && window.uploadedFiles.length
