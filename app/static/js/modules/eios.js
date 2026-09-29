@@ -96,22 +96,73 @@ async function loadEiosReports() {
         return;
     }
 
-    const sel = document.getElementById('eiosSurveySelect');
-    if ($(sel).hasClass('select2-hidden-accessible')) $(sel).select2('destroy');
-    sel.innerHTML = '';
-    sel.appendChild(new Option('', ''));
+    const list = document.getElementById('eiosSurveyList');
+    list.innerHTML = '';
+    document.getElementById('eiosSurveySearch').value = '';
+    const inner = document.createElement('div');
+    inner.style.cssText = 'width:max-content;min-width:100%';
     reports.forEach(rep => {
-        const opt = new Option(rep.name, String(rep.id));
-        opt.dataset.summable = rep.is_summable ? '1' : '0';
-        sel.appendChild(opt);
+        const cbId = `eios_survey_${rep.id}`;
+        const item = document.createElement('div');
+        item.className = 'list-group-item d-flex align-items-center gap-2 py-2 eios-survey-item';
+        item.dataset.name = rep.name;
+        const cb = document.createElement('input');
+        cb.className = 'form-check-input flex-shrink-0 eios-survey-cb';
+        cb.type = 'checkbox';
+        cb.id = cbId;
+        cb.value = String(rep.id);
+        cb.dataset.summable = rep.is_summable ? '1' : '0';
+        const label = document.createElement('label');
+        label.className = 'form-check-label fw-medium text-body text-nowrap cursor-pointer';
+        label.htmlFor = cbId;
+        label.title = rep.name;
+        label.textContent = rep.name;
+        item.append(cb, label);
+        inner.appendChild(item);
     });
+    list.appendChild(inner);
     block.classList.remove('d-none');
-    $(sel).select2({ theme: 'bootstrap-5', width: '100%', language: 'ru', placeholder: 'Выберите опрос…' });
 
     const saved = window.eiosSelection;
-    if (saved && reports.some(rep => rep.id === saved.profileId)) {
-        $(sel).val(String(saved.profileId)).trigger('change');
+    const savedCb = saved && list.querySelector(`.eios-survey-cb[value="${saved.profileId}"]`);
+    if (savedCb) {
+        savedCb.checked = true;
+        _eiosLoadMeta(saved.profileId);
+    } else if (reports.length === 1) {
+        _eiosSelectSurvey(list.querySelector('.eios-survey-cb'));
     }
+}
+
+// Выбор опроса — только один: отмечая чекбокс, снимаем остальные; снятие отметки сбрасывает выбор.
+function _eiosSelectSurvey(cb) {
+    document.querySelectorAll('#eiosSurveyList .eios-survey-cb').forEach(other => {
+        if (other !== cb) other.checked = false;
+    });
+    cb.checked = true;
+    const profileId = parseInt(cb.value, 10);
+    if (!window.eiosSelection || window.eiosSelection.profileId !== profileId) {
+        window.eiosSelection = {
+            profileId,
+            title: cb.closest('.eios-survey-item').dataset.name,
+            isSummable: cb.dataset.summable === '1',
+            cohorts: [],
+        };
+    }
+    _eiosLoadMeta(profileId);
+}
+
+function _eiosClearSurvey() {
+    window.eiosSelection = null;
+    window.eiosMeta = null;
+    document.getElementById('eiosToCohortsBtn').disabled = true;
+    document.getElementById('eiosSurveyInfo').textContent = '';
+}
+
+function _eiosFilterSurveys() {
+    const query = document.getElementById('eiosSurveySearch').value.trim().toLowerCase();
+    document.querySelectorAll('#eiosSurveyList .eios-survey-item').forEach(item => {
+        item.classList.toggle('q-filtered', !!query && !item.dataset.name.toLowerCase().includes(query));
+    });
 }
 
 async function _eiosLoadMeta(profileId) {
@@ -146,19 +197,22 @@ document.querySelectorAll('input[name="dataSource"]').forEach(radio => {
     });
 });
 
-$('#eiosSurveySelect').on('change', function () {
-    const profileId = parseInt(this.value, 10);
-    if (!profileId) return;
-    const opt = this.selectedOptions[0];
-    if (!window.eiosSelection || window.eiosSelection.profileId !== profileId) {
-        window.eiosSelection = {
-            profileId,
-            title: opt ? opt.textContent : '',
-            isSummable: !!opt && opt.dataset.summable === '1',
-            cohorts: [],
-        };
-    }
-    _eiosLoadMeta(profileId);
+const _eiosSurveyList = document.getElementById('eiosSurveyList');
+_eiosSurveyList.addEventListener('change', e => {
+    if (!e.target.classList.contains('eios-survey-cb')) return;
+    if (e.target.checked) _eiosSelectSurvey(e.target);
+    else _eiosClearSurvey();
+});
+// Клик по строке (мимо чекбокса и подписи) тоже переключает опрос — как в списке вопросов.
+_eiosSurveyList.addEventListener('click', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'LABEL') return;
+    const cb = e.target.closest('.eios-survey-item')?.querySelector('.eios-survey-cb');
+    if (cb) cb.click();
+});
+document.getElementById('eiosSurveySearch').addEventListener('input', _eiosFilterSurveys);
+document.getElementById('eiosSurveySearchClear').addEventListener('click', () => {
+    document.getElementById('eiosSurveySearch').value = '';
+    _eiosFilterSurveys();
 });
 
 // ===================== ШАГ 2 (ЭИОС): КОГОРТЫ =====================
@@ -421,7 +475,15 @@ function openEiosCohortEditor(idx) {
 
     const editor = document.getElementById('eiosCohortEditor');
     editor.classList.remove('d-none');
-    editor.scrollIntoView({ block: 'nearest' });
+    // Не scrollIntoView: он прокрутил бы по горизонтали и контейнер мастера (шаг может быть ещё
+    // за краем экрана во время анимации перехода) — трек съезжает. Прокручиваем только сам шаг.
+    const step = editor.closest('.wizard-step');
+    if (step) {
+        const top = editor.getBoundingClientRect().top - step.getBoundingClientRect().top + step.scrollTop;
+        const bottom = top + editor.offsetHeight;
+        if (top < step.scrollTop) step.scrollTop = top;
+        else if (bottom > step.scrollTop + step.clientHeight) step.scrollTop = Math.min(top, bottom - step.clientHeight);
+    }
 }
 
 function _eiosCloseEditor() {

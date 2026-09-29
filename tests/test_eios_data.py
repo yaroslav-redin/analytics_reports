@@ -160,3 +160,12 @@ def test_write_session_without_any_data_raises(tmp_path):
 def test_is_eios_cohort_file():
     assert is_eios_cohort_file("eios_cohort_0.json")
     assert not is_eios_cohort_file("clean_raw_a.xlsx.parquet")
+
+
+def test_html_stripped_from_question_and_answer_texts():
+    qs = [{"QuestionId": 1, "Text": "<strong>1. Your Gender:</strong>", "QuestionType": 0}]
+    names, _ = build_question_names(qs)
+    assert names == {1: "1. Your Gender:"}
+    report = {"Details": [{"QuestionId": 1, "QuestionType": 0, "Items": [
+        {"Text": "<p>Male</p>", "Count": 3}, {"Text": "Male", "Count": 2}]}]}
+    assert report_to_counts(report, names) == {"1. Your Gender:": {"Male": 5}}

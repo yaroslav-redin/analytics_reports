@@ -74,7 +74,7 @@ function _buildFullItemDOM(id, entry, container) {
     const el = _tpl('tpl-full-result-item');
 
     const titleSpan = el.querySelector('.full-item-title');
-    titleSpan.textContent = entry.question_name;
+    setQuestionLabel(titleSpan, entry.question_name);
     titleSpan.title = entry.question_name;
 
     el.querySelector('.full-item-collapse-btn').dataset.id = id;
@@ -169,7 +169,7 @@ function _buildSimpleItemDOM(id, entry, container) {
     const el = _tpl('tpl-simple-result-item');
 
     const titleSpan = el.querySelector('.simple-item-title');
-    titleSpan.textContent = entry.question_name;
+    setQuestionLabel(titleSpan, entry.question_name);
     titleSpan.title = entry.question_name;
 
     el.querySelector('.simple-item-collapse-btn').dataset.id = id;
@@ -189,7 +189,7 @@ function _buildRankItemDOM(id, entry, container) {
     const el = _tpl('tpl-rank-result-item');
 
     const titleSpan = el.querySelector('.rank-item-title');
-    titleSpan.textContent = entry.question_name;
+    setQuestionLabel(titleSpan, entry.question_name);
     titleSpan.title = entry.question_name;
 
     el.querySelector('.simple-item-collapse-btn').dataset.id = id;

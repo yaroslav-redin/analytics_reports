@@ -142,7 +142,7 @@ function _buildSectionQuestion(sectionId, q) {
     else if (q.visualize) item.classList.add('q-item-viz');
 
     const nameSpan = item.querySelector('.section-q-name');
-    nameSpan.textContent = q.qName;
+    setQuestionLabel(nameSpan, q.qName);
     nameSpan.title = q.qName;
 
     const vizBtn = item.querySelector('.section-q-viz-btn');
@@ -185,7 +185,7 @@ function _buildAvailableQItem(qName) {
     cb.dataset.qname = qName;
 
     const nameSpan = item.querySelector('.avail-q-name');
-    nameSpan.textContent = qName;
+    setQuestionLabel(nameSpan, qName);
     nameSpan.title = qName;
 
     if (multiFile) {
@@ -483,7 +483,7 @@ function _renderMergeQuestionsList(names, filter) {
         cb.id = uid;
         const label = item.querySelector('.merge-q-label');
         label.htmlFor = uid;
-        label.textContent = name;
+        setQuestionLabel(label, name);
 
         const merged = window.questionMerges && window.questionMerges[name];
         if (merged && merged.length) {

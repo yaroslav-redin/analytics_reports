@@ -1,6 +1,6 @@
 import pandas as pd
 
-from app.data_logic import generate_report_data
+from app.data_logic import generate_report_data, clean_dataframe
 from app.eios_data import write_eios_session
 from app.schemas import AnalyzeRequest, ColumnConfig
 from tests.eios_samples import sample_meta, sample_report, cohort
@@ -76,3 +76,10 @@ def test_parquet_path_unchanged(tmp_path):
     files = ["clean_raw_a.xlsx.parquet"]
     res = generate_report_data(str(tmp_path), _request(files, [_config("Вопрос", files)]))
     assert {r["answer"]: r["counts"][files[0]] for r in res[0]["data"]} == {"А": 2, "Б": 1}
+
+
+def test_clean_dataframe_strips_html_from_headers_and_answers():
+    df = pd.DataFrame({"<strong>1. Your Gender:</strong>": ["<p>Male</p>", "Female&nbsp;"]})
+    df = clean_dataframe(df)
+    assert list(df.columns) == ["1. Your Gender"]
+    assert list(df["1. Your Gender"]) == ["Male", "Female"]

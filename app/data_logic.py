@@ -4,10 +4,11 @@ import os
 from datetime import datetime
 from app import config as cfg
 from app.eios_data import is_eios_cohort_file, load_cohort
+from app.text_utils import strip_html
 
 def clean_column_name(col_name):
-    name = str(col_name).strip()
-    name = re.sub(r'^\s*\d+\s*[\)\.]\s*', '', name)
+    # Номер вопроса («1. », «2) ») не убираем — интерфейс выделяет его цветом.
+    name = strip_html(str(col_name)).strip()
     name = re.sub(r'\s*:\s*$', '', name)
     return name
 
@@ -71,7 +72,7 @@ def clean_age(age_str):
 def clean_dataframe(df):
     for col in df.columns:
         if is_system_column(col): continue
-        else: df[col] = unify_numbered_answers(df[col])
+        else: df[col] = unify_numbered_answers(df[col].map(strip_html))
 
     df.rename(columns=lambda x: clean_column_name(x), inplace=True)
     return df

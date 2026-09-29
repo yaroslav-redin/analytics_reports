@@ -10,6 +10,7 @@ import os
 from collections import Counter
 
 from app.schemas import EiosCohort, EiosCohortFilters
+from app.text_utils import strip_html
 
 COHORT_FILE_PREFIX = "eios_cohort_"
 
@@ -28,8 +29,17 @@ class EiosNoData(Exception):
     pass
 
 
+def clean_metadata(meta: dict) -> dict:
+    """Убирает HTML-разметку из текстов вопросов и вариантов справочника (на месте)."""
+    for q in meta.get("Questions") or []:
+        q["Text"] = strip_html(q.get("Text"))
+        for a in q.get("Answers") or []:
+            a["Text"] = strip_html(a.get("Text"))
+    return meta
+
+
 def _question_text(q: dict) -> str:
-    return (q.get("Text") or "").strip() or f"Вопрос {q['QuestionId']}"
+    return strip_html(q.get("Text") or "").strip() or f"Вопрос {q['QuestionId']}"
 
 
 def build_question_names(questions: list[dict]) -> tuple[dict[int, str], list[dict]]:
@@ -48,7 +58,7 @@ def build_question_names(questions: list[dict]) -> tuple[dict[int, str], list[di
 
 
 def _item_text(item: dict) -> str:
-    text = str(item.get("Text") or "").strip()
+    text = strip_html(str(item.get("Text") or "")).strip()
     return "" if text == ABSTAIN_TEXT else text
 
 

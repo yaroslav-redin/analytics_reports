@@ -25,6 +25,13 @@ function _writeStepToHash(n) {
     }
 }
 
+// Шаги сдвигаются через transform трека. Контейнеры с overflow:hidden браузер всё равно
+// прокручивает по горизонтали при focus()/scrollIntoView элемента с соседнего шага —
+// и трек съезжает. Держим их scrollLeft на нуле.
+document.querySelectorAll('.wizard-outer, .wizard-container').forEach(el => {
+    el.addEventListener('scroll', () => { if (el.scrollLeft) el.scrollLeft = 0; });
+});
+
 function _onDomReady(fn) {
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', fn, { once: true });

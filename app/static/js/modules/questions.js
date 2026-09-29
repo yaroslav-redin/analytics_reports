@@ -52,7 +52,8 @@ function _renderQuestionsForFile(fileIdx) {
         item.dataset.qname = qName;
         item.innerHTML = `
             <input class="form-check-input flex-shrink-0 q-checkbox" type="checkbox" id="${cbId}" value="${_escAttr(qName)}"${selectedQNames.has(qName) ? ' checked' : ''}>
-            <label class="form-check-label fw-medium ${labelColor} text-nowrap cursor-pointer" for="${cbId}" title="${_escAttr(qName)}">${_escHtml(qName)}</label>`;
+            <label class="form-check-label fw-medium ${labelColor} text-nowrap cursor-pointer" for="${cbId}" title="${_escAttr(qName)}"></label>`;
+        setQuestionLabel(item.querySelector('label'), qName);
         inner.appendChild(item);
     });
 
@@ -93,7 +94,9 @@ function autoMapQuestion(qName, sourceFileIdx) {
     for (let i = 0; i < window.processedFiles.length; i++) {
         if (i === sourceFileIdx) continue;
         const f = window.processedFiles[i];
-        const found = f.columns.find(c => c.name === qName);
+        const bare = _stripQuestionNumber(qName);
+        const found = f.columns.find(c => c.name === qName)
+            || f.columns.find(c => _stripQuestionNumber(c.name) === bare);
         if (found) {
             mapping[f.clean_filename] = found.name;
         } else {
@@ -115,7 +118,7 @@ function addQuestionToSortable(qName, sourceFileIdx) {
     const item = _tpl('tpl-sortable-q-item');
     item.dataset.col = qName;
     const labelSpan = item.querySelector('.q-label-span');
-    labelSpan.textContent = qName;
+    setQuestionLabel(labelSpan, qName);
     labelSpan.title = qName;
 
     if (missingIn.length > 0) {
@@ -168,7 +171,7 @@ window.openMappingModal = function (qName) {
     p.appendChild(document.createTextNode('Соотнести вопрос:\n'));
     const primarySpan = document.createElement('span');
     primarySpan.className = 'text-primary';
-    primarySpan.textContent = qName;
+    setQuestionLabel(primarySpan, qName);
     p.appendChild(primarySpan);
     p.appendChild(document.createTextNode('\n'));
     const smallEl = document.createElement('small');
@@ -357,7 +360,7 @@ function _buildSortableItemFromMapping(qName) {
     const item = _tpl('tpl-sortable-q-item');
     item.dataset.col = qName;
     const labelSpan = item.querySelector('.q-label-span');
-    labelSpan.textContent = qName;
+    setQuestionLabel(labelSpan, qName);
     labelSpan.title = qName;
 
     const qMapping = (window.questionMapping || {})[qName] || {};

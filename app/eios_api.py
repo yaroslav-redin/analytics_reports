@@ -10,6 +10,7 @@ import time
 import httpx
 
 from app.database import get_eios_tokens, save_eios_tokens, delete_eios_tokens
+from app.eios_data import clean_metadata
 
 api_base = lambda: os.getenv("EIOS_API_BASE", "https://papi.mrsu.ru").rstrip("/")
 token_url = lambda: os.getenv("EIOS_OAUTH_BASE", "https://p.mrsu.ru").rstrip("/") + "/OAuth/Token"
@@ -170,7 +171,7 @@ async def get_metadata(user_id: str, profile_id: int) -> dict:
     cached = _metadata_cache.get(key)
     if cached and time.time() - cached[0] < _METADATA_TTL_SECONDS:
         return cached[1]
-    data = await _request(user_id, "GET", "/v1/poolreportmetadata", params={"profileId": profile_id})
+    data = clean_metadata(await _request(user_id, "GET", "/v1/poolreportmetadata", params={"profileId": profile_id}))
     _metadata_cache[key] = (time.time(), data)
     return data
 

@@ -10,7 +10,7 @@
             <input type="radio" class="btn-check" name="dataSource" id="dsFiles" value="files" checked>
             <label class="btn btn-outline-primary" for="dsFiles"><i class="fa-solid fa-file-excel me-1"></i>Файлы</label>
             <input type="radio" class="btn-check" name="dataSource" id="dsEios" value="eios">
-            <label class="btn btn-outline-primary" for="dsEios"><i class="fa-solid fa-building-columns me-1"></i>Опрос из ЭИОС</label>
+            <label class="btn btn-outline-primary" for="dsEios"><i class="fa-solid fa-building-columns me-1"></i>ЭИОС</label>
         </div>
         <div id="filesSourcePane">
             <form id="uploadForm">
@@ -33,8 +33,14 @@
             </div>
             <div id="eiosSurveyAlert" class="alert d-none"></div>
             <div id="eiosSurveyBlock" class="d-none">
-                <label class="form-label fw-semibold" for="eiosSurveySelect">Опрос</label>
-                <select id="eiosSurveySelect" class="form-select"></select>
+                <div class="fw-bold pb-2"><i class="fa-solid fa-square-poll-vertical me-1"></i>Опрос</div>
+                <div class="input-group input-group-sm">
+                    <input type="text" class="form-control" id="eiosSurveySearch" placeholder="Поиск опроса...">
+                    <button class="btn btn-outline-secondary" type="button" id="eiosSurveySearchClear" tabindex="-1" title="Очистить поиск">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div id="eiosSurveyList" class="scrollable-box questions-scroll pt-0 pb-0 pr-0 pl-1"></div>
                 <div id="eiosSurveyInfo" class="small text-muted mt-2"></div>
             </div>
         </div>
