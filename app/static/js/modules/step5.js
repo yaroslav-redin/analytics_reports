@@ -11,6 +11,7 @@ function _newAppDataEntry(item, visualize) {
     // Свежая appData-запись с дефолтными настройками.
     return {
         question_name: item.col_name,
+        kind:      item.kind || 'counts',   // 'rank' — вопрос ЭИОС «порядок»: data[].ranks вместо counts
         visualize: visualize,
         options: {
             showTotal:       true,
@@ -73,7 +74,7 @@ function _buildFullItemDOM(id, entry, container) {
     const el = _tpl('tpl-full-result-item');
 
     const titleSpan = el.querySelector('.full-item-title');
-    titleSpan.textContent = entry.question_name;
+    setQuestionLabel(titleSpan, entry.question_name);
     titleSpan.title = entry.question_name;
 
     el.querySelector('.full-item-collapse-btn').dataset.id = id;
@@ -168,7 +169,7 @@ function _buildSimpleItemDOM(id, entry, container) {
     const el = _tpl('tpl-simple-result-item');
 
     const titleSpan = el.querySelector('.simple-item-title');
-    titleSpan.textContent = entry.question_name;
+    setQuestionLabel(titleSpan, entry.question_name);
     titleSpan.title = entry.question_name;
 
     el.querySelector('.simple-item-collapse-btn').dataset.id = id;
@@ -178,6 +179,95 @@ function _buildSimpleItemDOM(id, entry, container) {
 
     container.appendChild(el);
     renderTable(id);
+}
+
+function _formatRank(v) {
+    return v == null ? '—' : v.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function _buildRankItemDOM(id, entry, container) {
+    const el = _tpl('tpl-rank-result-item');
+
+    const titleSpan = el.querySelector('.rank-item-title');
+    setQuestionLabel(titleSpan, entry.question_name);
+    titleSpan.title = entry.question_name;
+
+    el.querySelector('.simple-item-collapse-btn').dataset.id = id;
+    el.querySelector('.rank-item-body').id = `simple_body_${id}`;
+
+    const multiFile = entry.file_keys.length > 1;
+    const table = el.querySelector('.rank-item-table');
+    const hRow = table.tHead.insertRow();
+    const thAnswer = document.createElement('th');
+    thAnswer.className = 'text-start';
+    thAnswer.textContent = 'Вариант';
+    hRow.appendChild(thAnswer);
+    entry.file_keys.forEach(fk => {
+        const th = document.createElement('th');
+        th.className = 'text-center';
+        th.textContent = multiFile ? `${entry.file_labels[fk]}: средний ранг` : 'Средний ранг';
+        hRow.appendChild(th);
+    });
+    entry.data.forEach(row => {
+        const tr = table.tBodies[0].insertRow();
+        const tdAnswer = tr.insertCell();
+        tdAnswer.textContent = row.answer;
+        entry.file_keys.forEach(fk => {
+            const td = tr.insertCell();
+            td.className = 'text-center';
+            td.textContent = _formatRank(row.ranks[fk]);
+        });
+    });
+
+    const wrap = el.querySelector('.rank-item-chart-wrap');
+    wrap.style.height = `${Math.max(160, entry.data.length * entry.file_keys.length * 24 + 70)}px`;
+    const canvas = el.querySelector('.rank-item-canvas');
+
+    container.appendChild(el);
+    drawRankChart(id, canvas);
+}
+
+function drawRankChart(id, canvas) {
+    const entry = window.appData[id];
+    const chartKey = `rank_${id}`;
+    if (window.charts[chartKey]) window.charts[chartKey].destroy();
+
+    const multiFile = entry.file_keys.length > 1;
+    const labels = entry.data.map(r => r.answer.length > 40 ? r.answer.substring(0, 40) + '…' : r.answer);
+    const datasets = entry.file_keys.map(fk => ({
+        label: entry.file_labels[fk],
+        data: entry.data.map(r => r.ranks[fk] ?? null),
+        backgroundColor: entry.file_colors[fk] || defaultColors[0],
+    }));
+
+    window.charts[chartKey] = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: { labels, datasets },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: { padding: { right: 40 } },
+            scales: {
+                x: { beginAtZero: true, title: { display: true, text: 'Средний ранг (меньше — важнее)' } },
+            },
+            plugins: {
+                legend: { display: multiFile, position: 'bottom' },
+                tooltip: {
+                    callbacks: {
+                        title: items => entry.data[items[0].dataIndex]?.answer || '',
+                        label: ctx => `${multiFile ? ctx.dataset.label + ': ' : ''}${_formatRank(ctx.raw)}`,
+                    },
+                },
+                datalabels: {
+                    color: _chartThemeColor(),
+                    anchor: 'end',
+                    align: 'end',
+                    formatter: v => v == null ? '' : _formatRank(v),
+                },
+            },
+        },
+    });
 }
 
 function _renderAllResultsFromAppData() {
@@ -222,8 +312,9 @@ function _renderAllResultsFromAppData() {
             if (!id || !sectionBody) return;
             assignedIds.add(id);
             const entry = window.appData[id];
-            if (entry.visualize) _buildFullItemDOM(id, entry, sectionBody);
-            else                 _buildSimpleItemDOM(id, entry, sectionBody);
+            if (entry.kind === 'rank')  _buildRankItemDOM(id, entry, sectionBody);
+            else if (entry.visualize)   _buildFullItemDOM(id, entry, sectionBody);
+            else                        _buildSimpleItemDOM(id, entry, sectionBody);
         });
     });
 
@@ -239,7 +330,8 @@ function _renderAllResultsFromAppData() {
         const unassignedBody = document.getElementById('rsc_unassigned');
         unassignedIds.forEach(id => {
             const entry = window.appData[id];
-            _buildSimpleItemDOM(id, entry, unassignedBody);
+            if (entry.kind === 'rank') _buildRankItemDOM(id, entry, unassignedBody);
+            else                       _buildSimpleItemDOM(id, entry, unassignedBody);
         });
     }
 
@@ -341,7 +433,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
     const fileColors = {};
     if (window.processedFiles && window.processedFiles.length === 1) {
         const f = window.processedFiles[0];
-        fileLabels[f.clean_filename] = f.original_name.replace(/\.[^.]+$/, '');
+        fileLabels[f.clean_filename] = f.label || f.original_name.replace(/\.[^.]+$/, '');
         fileColors[f.clean_filename] = defaultColors[0];
     } else {
         document.querySelectorAll('.legend-label').forEach(el => { fileLabels[el.dataset.file] = el.value || el.placeholder; });

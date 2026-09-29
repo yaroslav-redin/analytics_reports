@@ -124,7 +124,7 @@ function renderLegendSettings(savedLabels, savedColors) {
         btn.dataset.file = f.clean_filename;
         const textInput = item.querySelector('.legend-label');
         textInput.dataset.file = f.clean_filename;
-        textInput.value = (savedLabels && savedLabels[f.clean_filename]) || f.original_name.replace(/\.[^.]+$/, '');
+        textInput.value = (savedLabels && savedLabels[f.clean_filename]) || f.label || f.original_name.replace(/\.[^.]+$/, '');
         container.appendChild(item);
     });
 }

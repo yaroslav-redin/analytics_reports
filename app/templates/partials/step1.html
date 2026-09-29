@@ -1,19 +1,85 @@
-<!-- ШАГ 2: Листы -->
+<!-- ШАГ 2: Листы (файлы) или выборка (ЭИОС) -->
 <div class="wizard-step" id="wizardStep1">
     <div class="wizard-card">
         <div class="wizard-step-header">
             <span class="wizard-step-num">2</span>
-            <h4 class="wizard-step-title">Выберите листы для анализа</h4>
-            <span class="step-help-icon ms-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Для каждого загруженного файла выберите лист с данными опроса (в первой строке файла должны быть названия вопросов, в остальных - ответы)."><i class="fa-regular fa-circle-question"></i></span>
+            <h4 class="wizard-step-title" id="step1Title">Выберите листы для анализа</h4>
+            <span class="step-help-icon ms-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Для файлов — выберите листы с данными (в первой строке — названия вопросов, в остальных — ответы). Для ЭИОС — задайте одну или несколько выборок (когорт): они сравниваются между собой, как несколько файлов."><i class="fa-regular fa-circle-question"></i></span>
         </div>
-        <form id="sheetForm">
-            <div class="form-check pb-2">
-                <input class="form-check-input" type="checkbox" id="selectAllSheets">
-                <label class="form-check-label fw-bold" for="selectAllSheets">
-                    <i class="fa-solid fa-check-double me-1"></i>Все листы
-                </label>
+        <div id="sheetsPane">
+            <form id="sheetForm">
+                <div class="form-check pb-2">
+                    <input class="form-check-input" type="checkbox" id="selectAllSheets">
+                    <label class="form-check-label fw-bold" for="selectAllSheets">
+                        <i class="fa-solid fa-check-double me-1"></i>Все листы
+                    </label>
+                </div>
+                <div class="scrollable-box scrollable-box-lg mb-1" id="sheetCheckboxesContainer"></div>
+            </form>
+        </div>
+        <div id="eiosCohortsPane" class="d-none">
+            <div class="fw-semibold mb-2" id="eiosCohortsSurveyTitle"></div>
+            <div id="eiosCohortList"></div>
+            <button type="button" class="btn btn-outline-primary btn-sm mb-3" id="eiosAddCohortBtn">
+                <i class="fa-solid fa-plus me-1"></i>Добавить когорту
+            </button>
+            <div id="eiosCohortEditor" class="border rounded p-3 mb-2 d-none">
+                <div class="row g-2">
+                    <div class="col-md-7">
+                        <label class="form-label small mb-1" for="ecLabel">Название когорты (подпись в легенде)</label>
+                        <input type="text" class="form-control form-control-sm" id="ecLabel" maxlength="120" placeholder="Сформируется автоматически">
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label small mb-1" for="ecAudience">Аудитория</label>
+                        <select class="form-select form-select-sm" id="ecAudience">
+                            <option value="0">Студенты</option>
+                            <option value="1">Преподаватели по своим дисциплинам</option>
+                            <option value="2">Преподаватели по месту работы</option>
+                            <option value="3">Все</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4"><label class="form-label small mb-1" for="ecYear">Учебный год</label><select class="form-select form-select-sm" id="ecYear"></select></div>
+                    <div class="col-md-8"><label class="form-label small mb-1" for="ecFaculty">Факультет / институт</label><select class="form-select form-select-sm" id="ecFaculty"></select></div>
+                    <div class="col-md-4"><label class="form-label small mb-1" for="ecForm">Форма обучения</label><select class="form-select form-select-sm" id="ecForm"></select></div>
+                    <div class="col-md-8"><label class="form-label small mb-1" for="ecLevel">Уровень</label><select class="form-select form-select-sm" id="ecLevel"></select></div>
+                    <div class="col-md-6"><label class="form-label small mb-1" for="ecSpeciality">Специальность</label><select class="form-select form-select-sm" id="ecSpeciality"></select></div>
+                    <div class="col-md-6"><label class="form-label small mb-1" for="ecSpecialization">Специализация (профиль)</label><select class="form-select form-select-sm" id="ecSpecialization"></select></div>
+                    <div class="col-12">
+                        <label class="form-label small mb-1" for="ecGroups">Группы</label>
+                        <select class="form-select form-select-sm" id="ecGroups" multiple></select>
+                        <div class="form-text d-none" id="ecGroupsHint">Группы доступны после выбора специальности</div>
+                    </div>
+                    <div class="col-12" id="ecChildProfilesBlock">
+                        <label class="form-label small mb-1" for="ecChildProfiles">Дисциплины (дочерние профили)</label>
+                        <select class="form-select form-select-sm" id="ecChildProfiles" multiple></select>
+                    </div>
+                    <div class="col-md-6"><label class="form-label small mb-1" for="ecRegions">Регионы (граждане РФ)</label><select class="form-select form-select-sm" id="ecRegions" multiple></select></div>
+                    <div class="col-md-6"><label class="form-label small mb-1" for="ecCitizenships">Гражданство</label><select class="form-select form-select-sm" id="ecCitizenships" multiple></select></div>
+                    <div class="col-12 d-none" id="ecTeacherBlock">
+                        <div class="row g-2">
+                            <div class="col-md-3">
+                                <label class="form-label small mb-1" for="ecIsPps">ППС</label>
+                                <select class="form-select form-select-sm" id="ecIsPps">
+                                    <option value="">— не важно —</option><option value="true">Да</option><option value="false">Нет</option>
+                                </select>
+                            </div>
+                            <div class="col-md-5"><label class="form-label small mb-1" for="ecDepartment">Кафедра</label><select class="form-select form-select-sm" id="ecDepartment"></select></div>
+                            <div class="col-md-4"><label class="form-label small mb-1" for="ecDegrees">Учёная степень</label><select class="form-select form-select-sm" id="ecDegrees" multiple></select></div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3"><label class="form-label small mb-1" for="ecAgeFrom">Возраст от</label><input type="number" class="form-control form-control-sm" id="ecAgeFrom" min="0" max="120"></div>
+                    <div class="col-6 col-md-3"><label class="form-label small mb-1" for="ecAgeTo">Возраст до</label><input type="number" class="form-control form-control-sm" id="ecAgeTo" min="0" max="120"></div>
+                    <div class="col-12">
+                        <div class="small fw-semibold mb-1">Срез по ответам <span class="fw-normal text-muted">(«среди тех, кто ответил…», до 3 условий, все одновременно)</span></div>
+                        <div id="ecConditions"></div>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="ecAddCondition"><i class="fa-solid fa-plus me-1"></i>Условие</button>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="ecCancelBtn">Отмена</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="ecSaveBtn"><i class="fa-solid fa-check me-1"></i>Сохранить когорту</button>
+                </div>
             </div>
-            <div class="scrollable-box scrollable-box-lg mb-1" id="sheetCheckboxesContainer"></div>
-        </form>
+        </div>
     </div>
 </div>

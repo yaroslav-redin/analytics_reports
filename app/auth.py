@@ -3,8 +3,9 @@ import secrets
 import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse, JSONResponse
-from urllib.parse import urlencode
-from app.database import upsert_user
+from urllib.parse import urlencode, quote
+from app.database import upsert_user, save_eios_tokens, delete_eios_tokens
+from app.eios_api import tokens_from_response, token_url, api_base
 
 router = APIRouter()
 
@@ -24,25 +25,33 @@ _CLIENT_ID = lambda: os.getenv("EIOS_CLIENT_ID", "")
 _CLIENT_SECRET = lambda: os.getenv("EIOS_CLIENT_SECRET", "")
 _REDIRECT_URI = lambda: os.getenv("EIOS_REDIRECT_URI", "http://localhost:64548/signin-eios")
 
-_AUTH_URL = "https://p.mrsu.ru/OAuth/Authorize"
-_TOKEN_URL = "https://p.mrsu.ru/OAuth/Token"
-_USER_URL = "https://papi.mrsu.ru/v1/User"
-_SCOPE = "base"
+_OAUTH_BASE = lambda: os.getenv("EIOS_OAUTH_BASE", "https://p.mrsu.ru").rstrip("/")
+_SCOPE = lambda: os.getenv("EIOS_SCOPE", "base pool_report")
+
+
+def build_authorize_url(state: str, reconsent: bool = False) -> str:
+    params = {
+        "response_type": "code",
+        "client_id": _CLIENT_ID(),
+        "redirect_uri": _REDIRECT_URI(),
+        "scope": _SCOPE(),
+        "state": state,
+        "prompt": "login",
+    }
+    # force_confirm=1 заставляет портал заново показать экран согласия —
+    # нужно, если старый токен был выдан без scope pool_report.
+    if reconsent:
+        params["force_confirm"] = "1"
+    # quote вместо quote_plus: пробел в scope кодируется как %20, как требует ЭИОС.
+    return f"{_OAUTH_BASE()}/OAuth/Authorize?{urlencode(params, quote_via=quote)}"
 
 
 @router.get("/auth/login")
 async def login(request: Request):
     state = secrets.token_urlsafe(16)
     request.session["oauth_state"] = state
-    params = urlencode({
-        "response_type": "code",
-        "client_id": _CLIENT_ID(),
-        "redirect_uri": _REDIRECT_URI(),
-        "scope": _SCOPE,
-        "state": state,
-        "prompt": "login",
-    })
-    return RedirectResponse(f"{_AUTH_URL}?{params}")
+    reconsent = request.query_params.get("reconsent") == "1"
+    return RedirectResponse(build_authorize_url(state, reconsent=reconsent))
 
 
 @router.get("/signin-eios")
@@ -61,7 +70,7 @@ async def auth_callback(request: Request):
     try:
         async with httpx.AsyncClient() as client:
             token_resp = await client.post(
-                _TOKEN_URL,
+                token_url(),
                 data={
                     "grant_type": "authorization_code",
                     "code": code,
@@ -76,7 +85,7 @@ async def auth_callback(request: Request):
             tokens = token_resp.json()
 
             user_resp = await client.get(
-                _USER_URL,
+                f"{api_base()}/v1/User",
                 headers={"Authorization": f"Bearer {tokens['access_token']}"},
                 timeout=10.0,
             )
@@ -104,12 +113,17 @@ async def auth_callback(request: Request):
     if flags["is_banned"]:
         return RedirectResponse("/login?error=banned")
     user_data["is_admin"] = flags["is_admin"]
+    # Токены — только на сервере: session cookie подписана, но не зашифрована.
+    await save_eios_tokens(user["Id"], **tokens_from_response(tokens))
     request.session["user"] = user_data
     return RedirectResponse("/")
 
 
 @router.get("/auth/logout")
 async def logout(request: Request):
+    user = request.session.get("user")
+    if user:
+        await delete_eios_tokens(user["id"])
     request.session.clear()
     return RedirectResponse("/login")
 

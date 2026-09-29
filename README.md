@@ -19,11 +19,12 @@
 ```bash
 # 1. Клонировать репозиторий
 git clone <url>
-cd survey_analytics_app
+cd analytics_reports
 
 # 2. Создать виртуальное окружение
 python -m venv venv
-venv\Scripts\activate.bat        # Windows
+.\venv\Scripts\Activate.ps1      # Windows PowerShell 
+# venv\Scripts\activate.bat        # Windows cmd
 # source venv/bin/activate       # Linux / macOS
 
 # 3. Установить зависимости

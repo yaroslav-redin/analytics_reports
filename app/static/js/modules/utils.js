@@ -56,6 +56,26 @@ function randomColor() {
     return '#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0');
 }
 
+// Номер вопроса в начале названия: «17.1 », «1. », «2) », «5.». Сначала — многоуровневый номер
+// с пробелом, иначе «17.1 Текст» разобралось бы как «17.» + «1 Текст».
+const _Q_NUM_RE = /^(\s*\d{1,3}(?:\.\d{1,3})+\s+|\s*\d{1,3}(?:\.\d{1,3})*[.)]\s*)(?=\S)/;
+
+function _stripQuestionNumber(name) {
+    return String(name).replace(_Q_NUM_RE, '');
+}
+
+// Выводит название вопроса в el, выделяя номер серым (.q-num).
+function setQuestionLabel(el, name) {
+    const text = String(name);
+    const m = text.match(_Q_NUM_RE);
+    el.textContent = '';
+    if (!m) { el.textContent = text; return; }
+    const num = document.createElement('span');
+    num.className = 'q-num';
+    num.textContent = m[1];
+    el.append(num, text.slice(m[1].length));
+}
+
 function _tpl(id) {
     return document.getElementById(id).content.cloneNode(true).firstElementChild;
 }
