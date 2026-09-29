@@ -3,7 +3,7 @@ import re
 import os
 from datetime import datetime
 from app import config as cfg
-from app.eios_data import is_eios_cohort_file, load_cohort_counts
+from app.eios_data import is_eios_cohort_file, load_cohort
 
 def clean_column_name(col_name):
     name = str(col_name).strip()
@@ -140,6 +140,30 @@ def _add_counts(target: dict, source: dict):
         target[ans] = target.get(ans, 0) + cnt
 
 
+def _rank_result(cfg, file_labels, file_colors, eios_ranks):
+    """Вопрос типа «порядок»: средний ранг варианта по когортам (меньше — важнее), без процентов."""
+    q_file_keys = [k for k in file_labels if k in cfg.file_mapping]
+    per_file = {fk: eios_ranks.get(fk, {}).get(cfg.file_mapping[fk], {}) for fk in q_file_keys}
+    answers = {ans for ranks in per_file.values() for ans in ranks}
+
+    def mean_rank(row):
+        values = [v for v in row["ranks"].values() if v is not None]
+        return sum(values) / len(values)
+
+    data = [{"answer": ans, "included": True,
+             "ranks": {fk: per_file[fk].get(ans) for fk in q_file_keys}} for ans in answers]
+    data.sort(key=lambda r: (mean_rank(r), r["answer"]))
+    return {
+        "col_name": cfg.column,
+        "viz_type": cfg.viz_type,
+        "kind": "rank",
+        "data": data,
+        "file_labels": {k: file_labels[k] for k in q_file_keys},
+        "file_colors": {k: file_colors[k] for k in q_file_keys},
+        "file_keys": q_file_keys,
+    }
+
+
 def generate_report_data(upload_dir, request_data):
     file_labels = request_data.file_labels
     file_colors = request_data.file_colors
@@ -147,12 +171,13 @@ def generate_report_data(upload_dir, request_data):
     dfs = {}
     groups_cache = {}
     eios_counts = {}   # clean_filename когорты ЭИОС → {вопрос: {ответ: количество}}
+    eios_ranks = {}    # clean_filename когорты ЭИОС → {вопрос: {вариант: средний ранг}}
     for clean_filename in file_labels.keys():
         filepath = os.path.join(upload_dir, os.path.basename(clean_filename))
         if not os.path.exists(filepath):
             continue
         if is_eios_cohort_file(clean_filename):
-            eios_counts[clean_filename] = load_cohort_counts(filepath)
+            eios_counts[clean_filename], eios_ranks[clean_filename] = load_cohort(filepath)
         else:
             df = pd.read_parquet(filepath)
             dfs[clean_filename] = df
@@ -161,6 +186,10 @@ def generate_report_data(upload_dir, request_data):
     results = []
 
     for cfg in request_data.configs:
+        if any(q_name in eios_ranks.get(f_name, {}) for f_name, q_name in cfg.file_mapping.items()):
+            results.append(_rank_result(cfg, file_labels, file_colors, eios_ranks))
+            continue
+
         all_answers = set()
         file_counts = {}
         merged_columns = getattr(cfg, 'merged_columns', [])
@@ -205,6 +234,7 @@ def generate_report_data(upload_dir, request_data):
         results.append({
             "col_name": cfg.column,
             "viz_type": cfg.viz_type,
+            "kind": "counts",
             "data": data_dicts,
             "file_labels": q_file_labels,
             "file_colors": q_file_colors,

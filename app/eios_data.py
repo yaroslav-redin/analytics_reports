@@ -2,7 +2,8 @@
 
 Каждая когорта сохраняется как uploads/{session_id}/eios_cohort_{i}.json
 с готовыми счётчиками {вопрос: {ответ: количество}} — /analyze читает их
-вместо Parquet, остальной конвейер не меняется.
+вместо Parquet, остальной конвейер не меняется. Вопросы типа «порядок»
+хранятся отдельно — {вопрос: {вариант: средний ранг}}.
 """
 import json
 import os
@@ -12,9 +13,12 @@ from app.schemas import EiosCohort, EiosCohortFilters
 
 COHORT_FILE_PREFIX = "eios_cohort_"
 
-# 0 — один вариант, 1 — несколько, 4 — свой текст, 10 — звёзды.
-# 2 (порядок: Count — средний номер) и 3 (соответствие: нет Items) в счётчики не переводятся.
-SUPPORTED_QUESTION_TYPES = {0, 1, 4, 10}
+# 0 — один вариант, 1 — несколько, 4 — свой текст, 10 — звёзды: Items — количества.
+# 2 — порядок: Count — средний порядковый номер варианта, идёт в ranks, а не в счётчики.
+# 3 (соответствие: нет Items) не поддерживается.
+RANK_QUESTION_TYPE = 2
+COUNT_QUESTION_TYPES = {0, 1, 4, 10}
+SUPPORTED_QUESTION_TYPES = COUNT_QUESTION_TYPES | {RANK_QUESTION_TYPE}
 ABSTAIN_TEXT = "Воздержались от ответа"
 _STAT_KEYS = ("SessionsCount", "AudienceSize", "AnsweredCount", "CoveragePercent")
 _TEACHER_ONLY_FIELDS = ("IsPps", "Department")
@@ -43,23 +47,44 @@ def build_question_names(questions: list[dict]) -> tuple[dict[int, str], list[di
     return names, skipped
 
 
+def _item_text(item: dict) -> str:
+    text = str(item.get("Text") or "").strip()
+    return "" if text == ABSTAIN_TEXT else text
+
+
 def report_to_counts(report: dict, names: dict[int, str]) -> dict[str, dict[str, int]]:
     out: dict[str, dict[str, int]] = {}
     for detail in report.get("Details") or []:
         name = names.get(detail.get("QuestionId"))
-        if name is None:
+        if name is None or detail.get("QuestionType") == RANK_QUESTION_TYPE:
             continue
         counts: dict[str, int] = {}
         for item in detail.get("Items") or []:
-            text = str(item.get("Text") or "").strip()
-            if not text or text == ABSTAIN_TEXT:
-                continue
+            text = _item_text(item)
             cnt = int(round(float(item.get("Count") or 0)))
-            if cnt <= 0:
+            if not text or cnt <= 0:
                 continue
             counts[text] = counts.get(text, 0) + cnt
         if counts:
             out[name] = counts
+    return out
+
+
+def report_to_ranks(report: dict, names: dict[int, str]) -> dict[str, dict[str, float]]:
+    """Вопросы типа «порядок»: {вопрос: {вариант: средний ранг}}; 0 — варианту порядок не назначали."""
+    out: dict[str, dict[str, float]] = {}
+    for detail in report.get("Details") or []:
+        name = names.get(detail.get("QuestionId"))
+        if name is None or detail.get("QuestionType") != RANK_QUESTION_TYPE:
+            continue
+        ranks: dict[str, float] = {}
+        for item in detail.get("Items") or []:
+            text = _item_text(item)
+            rank = float(item.get("Count") or 0)
+            if text and rank > 0:
+                ranks[text] = round(rank, 2)
+        if ranks:
+            out[name] = ranks
     return out
 
 
@@ -83,24 +108,26 @@ def is_eios_cohort_file(name: str) -> bool:
     return name.startswith(COHORT_FILE_PREFIX) and name.endswith(".json")
 
 
-def load_cohort_counts(filepath: str) -> dict[str, dict[str, int]]:
+def load_cohort(filepath: str) -> tuple[dict[str, dict[str, int]], dict[str, dict[str, float]]]:
+    """Счётчики и средние ранги когорты."""
     with open(filepath, "r", encoding="utf-8") as f:
-        return json.load(f).get("counts", {})
+        data = json.load(f)
+    return data.get("counts", {}), data.get("ranks", {})
 
 
 def write_eios_session(
     session_path: str, meta: dict, cohort_reports: list[tuple[EiosCohort, dict]],
 ) -> tuple[list[dict], list[dict]]:
     names, skipped = build_question_names(meta.get("Questions") or [])
-    per_cohort = [(c, r, report_to_counts(r, names)) for c, r in cohort_reports]
+    per_cohort = [(c, r, report_to_counts(r, names), report_to_ranks(r, names)) for c, r in cohort_reports]
 
-    with_data = {name for _, _, counts in per_cohort for name in counts}
+    with_data = {name for _, _, counts, ranks in per_cohort for name in (*counts, *ranks)}
     ordered = [name for name in names.values() if name in with_data]
     if not ordered:
         raise EiosNoData("Ни одна анкета не попала в выборку. Ослабьте фильтры или выберите другой опрос.")
 
     processed = []
-    for i, (cohort, report, counts) in enumerate(per_cohort):
+    for i, (cohort, report, counts, ranks) in enumerate(per_cohort):
         filename = f"{COHORT_FILE_PREFIX}{i}.json"
         stats = {k: report.get(k) for k in _STAT_KEYS}
         payload = {
@@ -109,6 +136,7 @@ def write_eios_session(
             "filters": cohort.filters.model_dump(),
             "stats": stats,
             "counts": counts,
+            "ranks": ranks,
         }
         with open(os.path.join(session_path, filename), "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False)

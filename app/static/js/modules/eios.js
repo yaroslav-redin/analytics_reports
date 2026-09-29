@@ -491,7 +491,7 @@ async function buildEiosSession() {
     }
     const skipped = r.data.skipped_questions || [];
     if (skipped.length) {
-        showToast(`Пропущено вопросов типа «порядок» / «соответствие»: ${skipped.length} — их нельзя свести в таблицу ответов`, 'info');
+        showToast(`Пропущено вопросов типа «соответствие»: ${skipped.length} — ЭИОС не отдаёт по ним ответы`, 'info');
     }
 
     renderQuestionsStep3();

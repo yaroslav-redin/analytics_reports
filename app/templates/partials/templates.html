@@ -273,6 +273,33 @@
     </div>
 </template>
 
+<!-- Вопрос ЭИОС типа «порядок»: средние ранги вариантов (step5.js), в DOCX не выгружается -->
+<template id="tpl-rank-result-item">
+    <div class="result-item-simple open mb-1">
+        <div class="d-flex align-items-center gap-2 py-1 px-2 bg-light simple-item-header border rounded ui-system-font">
+            <i class="fa-solid fa-ranking-star text-secondary" title="Вопрос на ранжирование"></i>
+            <span class="flex-grow-1 small fw-semibold text-truncate rank-item-title"></span>
+            <button type="button" class="simple-item-collapse-btn btn btn-sm btn-link p-0 text-secondary" title="Свернуть">
+                <i class="fa-solid fa-chevron-up"></i>
+            </button>
+        </div>
+        <div class="border border-top-0 rounded-bottom p-2 rank-item-body">
+            <div class="small text-muted mb-2 ui-system-font">
+                <i class="fa-solid fa-circle-info me-1"></i>Средний порядковый номер варианта: чем меньше, тем выше его ставили респонденты.
+                Такие вопросы показываются только на экране и не попадают в отчёт DOCX.
+            </div>
+            <div class="table-responsive mb-3">
+                <table class="table table-bordered table-hover table-custom-border align-middle mb-0 rank-item-table">
+                    <thead></thead><tbody></tbody>
+                </table>
+            </div>
+            <div class="rank-item-chart-wrap" style="position:relative;">
+                <canvas class="rank-item-canvas"></canvas>
+            </div>
+        </div>
+    </div>
+</template>
+
 <!-- Карточка раздела на шаге 5 (step5.js) -->
 <template id="tpl-report-section-card">
     <div class="report-section-card mb-4">

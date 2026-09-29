@@ -110,8 +110,9 @@ async function _doExport() {
 
 
     const nameToId = {};
+    // Вопросы-рейтинги ЭИОС (средний ранг) показываются только на экране — в DOCX не выгружаем.
     for (const id of Object.keys(window.appData)) {
-        if (id.startsWith('both_table_')) continue; 
+        if (id.startsWith('both_table_') || window.appData[id].kind === 'rank') continue;
         const qName = window.appData[id].question_name;
         if (qName) nameToId[qName] = id;
     }
@@ -186,7 +187,7 @@ async function _doExport() {
     // Нераспределённые вопросы (без раздела)
     for (const [id, dataObj] of Object.entries(window.appData)) {
         const qName = dataObj.question_name;
-        if (processedQNames.has(qName)) continue;
+        if (processedQNames.has(qName) || dataObj.kind === 'rank') continue;
         processedQNames.add(qName);
 
         const activeRows = dataObj.data

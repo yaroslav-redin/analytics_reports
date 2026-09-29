@@ -2,19 +2,19 @@ import pytest
 from pydantic import ValidationError
 
 from app.eios_data import (
-    build_question_names, report_to_counts, build_report_request,
-    write_eios_session, load_cohort_counts, is_eios_cohort_file, EiosNoData,
+    build_question_names, report_to_counts, report_to_ranks, build_report_request,
+    write_eios_session, load_cohort, is_eios_cohort_file, EiosNoData,
 )
 from app.schemas import EiosCondition, EiosCohortFilters, EiosBuildRequest
 from tests.eios_samples import sample_meta, sample_report, empty_report, cohort
 
-NAMES = ["Оцените организацию практики", "Порекомендовали бы?", "Ваши предложения"]
+NAMES = ["Оцените организацию практики", "Порекомендовали бы?", "Расставьте по важности", "Ваши предложения"]
 
 
 def test_names_follow_metadata_order_and_skip_unsupported():
     names, skipped = build_question_names(sample_meta()["Questions"])
     assert list(names.values()) == NAMES
-    assert [s["id"] for s in skipped] == [13, 14]
+    assert [s["id"] for s in skipped] == [14]
 
 
 def test_duplicate_texts_get_question_id_suffix():
@@ -38,6 +38,12 @@ def test_report_to_counts_drops_abstain_and_unsupported():
         "Ваши предложения": {"Больше практики": 3},
     }
     assert all(isinstance(v, int) for q in counts.values() for v in q.values())
+
+
+def test_report_to_ranks_keeps_average_order_as_float():
+    names, _ = build_question_names(sample_meta()["Questions"])
+    ranks = report_to_ranks(sample_report(), names)
+    assert ranks == {"Расставьте по важности": {"Зарплата": 1.7, "График": 2.3}}
 
 
 def test_report_to_counts_empty_report():
@@ -129,9 +135,11 @@ def test_write_session_files_and_processed(tmp_path):
     assert [c["name"] for c in p["columns"]] == NAMES
     assert all(c["is_system"] is False for c in p["columns"])
     assert p["stats"]["SessionsCount"] == 100
-    assert [s["id"] for s in skipped] == [13, 14]
-    saved = load_cohort_counts(str(tmp_path / "eios_cohort_0.json"))
-    assert saved["Порекомендовали бы?"] == {"Да": 80, "Нет": 20}
+    assert [s["id"] for s in skipped] == [14]
+    counts, ranks = load_cohort(str(tmp_path / "eios_cohort_0.json"))
+    assert counts["Порекомендовали бы?"] == {"Да": 80, "Нет": 20}
+    assert "Расставьте по важности" not in counts
+    assert ranks == {"Расставьте по важности": {"Зарплата": 1.7, "График": 2.3}}
 
 
 def test_write_session_keeps_empty_cohort(tmp_path):
@@ -141,7 +149,7 @@ def test_write_session_keeps_empty_cohort(tmp_path):
     )
     assert [p["clean_filename"] for p in processed] == ["eios_cohort_0.json", "eios_cohort_1.json"]
     assert processed[1]["stats"]["SessionsCount"] == 0
-    assert load_cohort_counts(str(tmp_path / "eios_cohort_1.json")) == {}
+    assert load_cohort(str(tmp_path / "eios_cohort_1.json")) == ({}, {})
 
 
 def test_write_session_without_any_data_raises(tmp_path):
