@@ -1,9 +1,9 @@
 from app.schemas import EiosCohort, EiosCohortFilters
 
 
-def sample_meta():
+def sample_meta(profile_id=1004939, title="Удовлетворенность практикой"):
     return {
-        "TestProfileId": 1004939, "Title": "Удовлетворенность практикой",
+        "TestProfileId": profile_id, "Title": title,
         "IsSummable": True, "TeacherUser": None,
         "Questions": [
             {"QuestionId": 11, "Text": "Оцените организацию практики", "QuestionType": 10,
@@ -62,5 +62,5 @@ def empty_report():
     }
 
 
-def cohort(label="Все респонденты", **filters):
-    return EiosCohort(label=label, filters=EiosCohortFilters(**filters))
+def cohort(label="Все респонденты", profile_id=1004939, **filters):
+    return EiosCohort(profile_id=profile_id, label=label, filters=EiosCohortFilters(**filters))

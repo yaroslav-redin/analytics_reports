@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from pydantic import ValidationError
 
@@ -5,7 +7,7 @@ from app.eios_data import (
     build_question_names, report_to_counts, report_to_ranks, build_report_request,
     write_eios_session, load_cohort, is_eios_cohort_file, EiosNoData,
 )
-from app.schemas import EiosCondition, EiosCohortFilters, EiosBuildRequest
+from app.schemas import EiosCondition, EiosCohort, EiosCohortFilters, EiosBuildRequest
 from tests.eios_samples import sample_meta, sample_report, empty_report, cohort
 
 NAMES = ["Оцените организацию практики", "Порекомендовали бы?", "Расставьте по важности", "Ваши предложения"]
@@ -122,12 +124,12 @@ def test_unknown_audience_rejected():
 
 def test_cohort_count_limit():
     with pytest.raises(ValidationError):
-        EiosBuildRequest(profile_id=1, cohorts=[cohort(str(i)) for i in range(7)])
+        EiosBuildRequest(cohorts=[cohort(str(i)) for i in range(7)])
 
 
 def test_write_session_files_and_processed(tmp_path):
     processed, skipped = write_eios_session(
-        str(tmp_path), sample_meta(), [(cohort("Очная"), sample_report())],
+        str(tmp_path), {1004939: sample_meta()}, [(cohort("Очная"), sample_report())],
     )
     p = processed[0]
     assert p["clean_filename"] == "eios_cohort_0.json"
@@ -144,7 +146,7 @@ def test_write_session_files_and_processed(tmp_path):
 
 def test_write_session_keeps_empty_cohort(tmp_path):
     processed, _ = write_eios_session(
-        str(tmp_path), sample_meta(),
+        str(tmp_path), {1004939: sample_meta()},
         [(cohort("Очная"), sample_report()), (cohort("Заочная"), empty_report())],
     )
     assert [p["clean_filename"] for p in processed] == ["eios_cohort_0.json", "eios_cohort_1.json"]
@@ -154,7 +156,58 @@ def test_write_session_keeps_empty_cohort(tmp_path):
 
 def test_write_session_without_any_data_raises(tmp_path):
     with pytest.raises(EiosNoData):
-        write_eios_session(str(tmp_path), sample_meta(), [(cohort(), empty_report())])
+        write_eios_session(str(tmp_path), {1004939: sample_meta()}, [(cohort(), empty_report())])
+
+
+OTHER = 2002
+
+
+def other_meta():
+    m = sample_meta(profile_id=OTHER, title="Практика 2025")
+    m["Questions"] = [q for q in m["Questions"] if q["QuestionId"] in (12, 14)]
+    return m
+
+
+def test_cohort_requires_profile_id():
+    with pytest.raises(ValidationError):
+        EiosCohort(label="x", filters=EiosCohortFilters())
+
+
+def test_write_session_two_surveys_have_own_columns(tmp_path):
+    processed, _ = write_eios_session(
+        str(tmp_path), {1004939: sample_meta(), OTHER: other_meta()},
+        [(cohort("2024"), sample_report()), (cohort("2025", profile_id=OTHER), sample_report())],
+    )
+    assert [c["name"] for c in processed[0]["columns"]] == NAMES
+    assert [c["name"] for c in processed[1]["columns"]] == ["Порекомендовали бы?"]
+    counts, _ = load_cohort(str(tmp_path / "eios_cohort_1.json"))
+    assert counts == {"Порекомендовали бы?": {"Да": 80, "Нет": 20}}
+    with open(tmp_path / "eios_cohort_1.json", encoding="utf-8") as f:
+        assert json.load(f)["profile_id"] == OTHER
+
+
+def test_skipped_listed_once_per_survey_with_title(tmp_path):
+    _, skipped = write_eios_session(
+        str(tmp_path), {1004939: sample_meta(), OTHER: other_meta()},
+        [(cohort("a"), sample_report()), (cohort("b"), sample_report()),
+         (cohort("c", profile_id=OTHER), sample_report())],
+    )
+    assert [(s["id"], s["survey"]) for s in skipped] == [
+        (14, "Удовлетворенность практикой"), (14, "Практика 2025")]
+
+
+def test_write_session_raises_only_when_all_surveys_empty(tmp_path):
+    metas = {1004939: sample_meta(), OTHER: other_meta()}
+    processed, _ = write_eios_session(
+        str(tmp_path), metas,
+        [(cohort("a"), empty_report()), (cohort("b", profile_id=OTHER), sample_report())],
+    )
+    assert processed[0]["columns"] == []
+    with pytest.raises(EiosNoData):
+        write_eios_session(
+            str(tmp_path), metas,
+            [(cohort("a"), empty_report()), (cohort("b", profile_id=OTHER), empty_report())],
+        )
 
 
 def test_is_eios_cohort_file():

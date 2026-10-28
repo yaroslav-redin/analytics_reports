@@ -30,7 +30,7 @@ from app.schemas import ProcessSheetsRequest, AnalyzeRequest, ExportDocxRequest,
 from app.docx_gen import generate_analysis_docx
 from app import eios_api
 from app.eios_api import EiosApiError, EiosForbidden
-from app.eios_data import build_report_request, write_eios_session, EiosNoData
+from app.eios_data import write_eios_session, EiosNoData
 from app.ai_report import group_answers_llm
 from app.auth import router as auth_router
 from app.database import (
@@ -434,9 +434,6 @@ async def analyze_data(request: Request, body: AnalyzeRequest):
 
 # ===================== ЭИОС: ОТЧЁТЫ ОПРОСОВ =====================
 
-_EIOS_REPORT_CONCURRENCY = 2   # параллельных POST /v1/poolreport на одну сборку
-
-
 def _eios_error(exc: EiosApiError, code: str | None = None, message: str | None = None):
     return JSONResponse(status_code=exc.status_code,
                         content={"message": message or exc.message, "code": code or exc.code})
@@ -474,15 +471,8 @@ async def eios_metadata(profile_id: int, request: Request):
 @limiter.limit("10/minute")
 async def eios_build_session(request: Request, body: EiosBuildRequest):
     user_id = request.session["user"]["id"]
-    sem = asyncio.Semaphore(_EIOS_REPORT_CONCURRENCY)
-
-    async def fetch(cohort):
-        async with sem:
-            return await eios_api.get_report(user_id, build_report_request(body.profile_id, cohort.filters))
-
     try:
-        meta = await eios_api.get_metadata(user_id, body.profile_id)
-        reports = await asyncio.gather(*(fetch(c) for c in body.cohorts))
+        metas, reports = await eios_api.fetch_cohorts(user_id, body.cohorts)
     except EiosApiError as exc:
         return _eios_error(exc)
 
@@ -490,13 +480,13 @@ async def eios_build_session(request: Request, body: EiosBuildRequest):
     session_id, session_path = _new_user_session(user_id)
     await pop_user_sessions(user_id)
     try:
-        processed, skipped = write_eios_session(session_path, meta, list(zip(body.cohorts, reports)))
+        processed, skipped = write_eios_session(session_path, metas, list(zip(body.cohorts, reports)))
     except EiosNoData as exc:
         _rmtree_force(session_path)
         return JSONResponse(status_code=400, content={"message": str(exc), "code": "no_data"})
     except Exception:
         _rmtree_force(session_path)
-        _logger.exception("Ошибка сборки сессии ЭИОС user=%s profile=%s", user_id, body.profile_id)
+        _logger.exception("Ошибка сборки сессии ЭИОС user=%s profiles=%s", user_id, list(metas))
         return JSONResponse(status_code=500, content={"message": "Не удалось обработать ответ ЭИОС."})
 
     await log_upload_session(
@@ -507,7 +497,7 @@ async def eios_build_session(request: Request, body: EiosBuildRequest):
         "session_id": session_id,
         "processed_files": processed,
         "skipped_questions": skipped,
-        "survey_title": meta.get("Title") or "",
+        "survey_titles": [m.get("Title") or f"Опрос {pid}" for pid, m in metas.items()],
     }
 
 @app.post("/ai_group_answers")

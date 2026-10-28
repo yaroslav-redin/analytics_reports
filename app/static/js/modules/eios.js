@@ -1,9 +1,12 @@
 // ===================== ИСТОЧНИК ДАННЫХ: ЭИОС =====================
 window.dataSource = window.dataSource || 'files';
+// { surveys: [{id, title}], cohorts: [{profile_id, label, filters}] } — сохраняется в sessionStorage.
 window.eiosSelection = window.eiosSelection || null;
-window.eiosMeta = null;   // справочник выбранного опроса — не сохраняется в sessionStorage, грузится заново
+// Справочники выбранных опросов по profile_id — не сохраняются в sessionStorage, грузятся заново.
+window.eiosMetaByProfile = {};
 
 const EIOS_MAX_COHORTS = 6;
+const EIOS_MAX_SURVEYS = EIOS_MAX_COHORTS;   // у каждого опроса минимум одна когорта
 const EIOS_MAX_CONDITIONS = 3;
 const EIOS_AUDIENCES = {
     0: 'Студенты',
@@ -24,6 +27,8 @@ const EIOS_TREE_LEVELS = [
 ];
 
 let _eiosReportsLoaded = false;
+// Опросы, справочник которых не загрузился при восстановлении: отметку и когорты сохраняем.
+const _eiosMetaFailed = new Set();
 
 async function _eiosFetchJson(url, opts) {
     try {
@@ -123,39 +128,101 @@ async function loadEiosReports() {
     list.appendChild(inner);
     block.classList.remove('d-none');
 
-    const saved = window.eiosSelection;
-    const savedCb = saved && list.querySelector(`.eios-survey-cb[value="${saved.profileId}"]`);
-    if (savedCb) {
-        savedCb.checked = true;
-        _eiosLoadMeta(saved.profileId);
-    } else if (reports.length === 1) {
-        _eiosSelectSurvey(list.querySelector('.eios-survey-cb'));
+    const sel = _eiosNormalizeSelection(window.eiosSelection);
+    if (sel) {
+        // Опросы, к которым пропал доступ, убираем вместе с их когортами.
+        const lost = sel.surveys.filter(s => !list.querySelector(`.eios-survey-cb[value="${s.id}"]`));
+        lost.forEach(s => _eiosRemoveSurvey(s.id));
+        if (lost.length) _eiosSelectionChanged();
+        sel.surveys.forEach(s => {
+            list.querySelector(`.eios-survey-cb[value="${s.id}"]`).checked = true;
+            _eiosLoadMeta(s.id, false);
+        });
     }
+    if ((!sel || !sel.surveys.length) && reports.length === 1) {
+        const only = list.querySelector('.eios-survey-cb');
+        only.checked = true;
+        _eiosToggleSurvey(only);
+    }
+    _eiosUpdateSurveyUI();
 }
 
-// Выбор опроса — только один: отмечая чекбокс, снимаем остальные; снятие отметки сбрасывает выбор.
-function _eiosSelectSurvey(cb) {
-    document.querySelectorAll('#eiosSurveyList .eios-survey-cb').forEach(other => {
-        if (other !== cb) other.checked = false;
-    });
-    cb.checked = true;
-    const profileId = parseInt(cb.value, 10);
-    if (!window.eiosSelection || window.eiosSelection.profileId !== profileId) {
-        window.eiosSelection = {
-            profileId,
-            title: cb.closest('.eios-survey-item').dataset.name,
-            isSummable: cb.dataset.summable === '1',
-            cohorts: [],
+// Старый формат состояния (один опрос): { profileId, title, cohorts } → { surveys, cohorts }.
+function _eiosNormalizeSelection(sel) {
+    if (sel && sel.profileId !== undefined) {
+        sel = {
+            surveys: [{ id: sel.profileId, title: sel.title }],
+            cohorts: (sel.cohorts || []).map(c => ({ ...c, profile_id: sel.profileId })),
         };
     }
-    _eiosLoadMeta(profileId);
+    window.eiosSelection = sel || null;
+    return window.eiosSelection;
 }
 
-function _eiosClearSurvey() {
-    window.eiosSelection = null;
-    window.eiosMeta = null;
-    document.getElementById('eiosToCohortsBtn').disabled = true;
-    document.getElementById('eiosSurveyInfo').textContent = '';
+function _eiosSurveyTitle(id) {
+    const s = window.eiosSelection && window.eiosSelection.surveys.find(x => x.id === id);
+    return s ? s.title : `Опрос ${id}`;
+}
+
+function _eiosAllMetaLoaded() {
+    const sel = window.eiosSelection;
+    return !!sel && sel.surveys.every(s => window.eiosMetaByProfile[s.id]);
+}
+
+// Опросов можно отметить несколько (до EIOS_MAX_SURVEYS); снятие отметки убирает опрос и его когорты.
+function _eiosToggleSurvey(cb) {
+    const id = parseInt(cb.value, 10);
+    if (!cb.checked) {
+        _eiosRemoveSurvey(id);
+        _eiosSelectionChanged();
+        return;
+    }
+    if (!window.eiosSelection) window.eiosSelection = { surveys: [], cohorts: [] };
+    if (!window.eiosSelection.surveys.some(s => s.id === id)) {
+        window.eiosSelection.surveys.push({ id, title: cb.closest('.eios-survey-item').dataset.name });
+    }
+    _eiosUpdateSurveyUI();
+    _eiosLoadMeta(id, true);
+}
+
+function _eiosRemoveSurvey(id) {
+    const sel = window.eiosSelection;
+    delete window.eiosMetaByProfile[id];
+    _eiosMetaFailed.delete(id);
+    if (!sel) return;
+    sel.surveys = sel.surveys.filter(s => s.id !== id);
+    sel.cohorts = sel.cohorts.filter(c => c.profile_id !== id);
+}
+
+// После удаления опросов/когорт: открытый редактор держит устаревший индекс, карточки — устаревшие data-idx.
+function _eiosSelectionChanged() {
+    _eiosCloseEditor();
+    if (window.dataSource === 'eios') renderEiosCohorts();
+    _eiosUpdateSurveyUI();
+}
+
+function _eiosUpdateSurveyUI() {
+    const sel = window.eiosSelection;
+    const count = sel ? sel.surveys.length : 0;
+    document.querySelectorAll('#eiosSurveyList .eios-survey-cb').forEach(cb => {
+        cb.disabled = !cb.checked && count >= EIOS_MAX_SURVEYS;
+    });
+    document.getElementById('eiosToCohortsBtn').disabled = !count || !_eiosAllMetaLoaded();
+    const info = document.getElementById('eiosSurveyInfo');
+    if (!count) { info.textContent = ''; return; }
+    const failed = sel.surveys.filter(s => _eiosMetaFailed.has(s.id));
+    if (failed.length) {
+        info.textContent = `Не удалось загрузить справочник: ${failed.map(s => s.title).join(', ')}. `
+            + 'Обновите страницу, чтобы повторить.';
+        return;
+    }
+    if (!_eiosAllMetaLoaded()) { info.textContent = 'Загрузка справочника опроса…'; return; }
+    if (count > 1) { info.textContent = `Выбрано опросов: ${count}`; return; }
+    const meta = window.eiosMetaByProfile[sel.surveys[0].id];
+    const parts = [`Вопросов в анкете: ${(meta.Questions || []).length}`];
+    if (meta.TeacherUser && meta.TeacherUser.FIO) parts.push(`Оценивается преподаватель: ${meta.TeacherUser.FIO}`);
+    if (!meta.IsSummable) parts.push('опрос без сводной таблицы');
+    info.textContent = parts.join(' · ');
 }
 
 function _eiosFilterSurveys() {
@@ -165,28 +232,30 @@ function _eiosFilterSurveys() {
     });
 }
 
-async function _eiosLoadMeta(profileId) {
-    const btn = document.getElementById('eiosToCohortsBtn');
-    const info = document.getElementById('eiosSurveyInfo');
-    btn.disabled = true;
-    window.eiosMeta = null;
-    info.textContent = 'Загрузка справочника опроса…';
-
+// fromUser — опрос только что отметил пользователь; иначе — восстановление сохранённого выбора.
+async function _eiosLoadMeta(profileId, fromUser) {
+    _eiosMetaFailed.delete(profileId);
     const r = await _eiosFetchJson(`/eios/metadata/${profileId}`);
-    // Пока шёл запрос, пользователь мог выбрать другой опрос.
-    if (!window.eiosSelection || window.eiosSelection.profileId !== profileId) return false;
+    // Пока шёл запрос, пользователь мог снять отметку с опроса.
+    if (!window.eiosSelection || !window.eiosSelection.surveys.some(s => s.id === profileId)) return false;
     if (!r.ok) {
-        info.textContent = '';
+        if (fromUser) {
+            // Только что отмеченный опрос без справочника не настроить — снимаем отметку.
+            _eiosRemoveSurvey(profileId);
+            const cb = document.querySelector(`#eiosSurveyList .eios-survey-cb[value="${profileId}"]`);
+            if (cb) cb.checked = false;
+            _eiosSelectionChanged();
+        } else {
+            // При восстановлении не теряем настроенные когорты из-за временной ошибки ЭИОС.
+            _eiosMetaFailed.add(profileId);
+            _eiosUpdateSurveyUI();
+        }
         if (_eiosNeedsLogin(r)) _eiosShowAlert('warning', _eiosReloginHtml(r.data.message));
         else showToast(_escHtml(r.data.message || 'Не удалось загрузить справочник опроса'), 'danger');
         return false;
     }
-    window.eiosMeta = r.data;
-    const parts = [`Вопросов в анкете: ${(r.data.Questions || []).length}`];
-    if (r.data.TeacherUser && r.data.TeacherUser.FIO) parts.push(`Оценивается преподаватель: ${r.data.TeacherUser.FIO}`);
-    if (!r.data.IsSummable) parts.push('опрос без сводной таблицы');
-    info.textContent = parts.join(' · ');
-    btn.disabled = false;
+    window.eiosMetaByProfile[profileId] = r.data;
+    _eiosUpdateSurveyUI();
     return true;
 }
 
@@ -200,8 +269,7 @@ document.querySelectorAll('input[name="dataSource"]').forEach(radio => {
 const _eiosSurveyList = document.getElementById('eiosSurveyList');
 _eiosSurveyList.addEventListener('change', e => {
     if (!e.target.classList.contains('eios-survey-cb')) return;
-    if (e.target.checked) _eiosSelectSurvey(e.target);
-    else _eiosClearSurvey();
+    _eiosToggleSurvey(e.target);
 });
 // Клик по строке (мимо чекбокса и подписи) тоже переключает опрос — как в списке вопросов.
 _eiosSurveyList.addEventListener('click', e => {
@@ -217,6 +285,15 @@ document.getElementById('eiosSurveySearchClear').addEventListener('click', () =>
 
 // ===================== ШАГ 2 (ЭИОС): КОГОРТЫ =====================
 let _eiosEditingIdx = null;   // индекс редактируемой когорты; null — новая
+
+function _eiosMultiSurvey() {
+    return !!window.eiosSelection && window.eiosSelection.surveys.length > 1;
+}
+
+// Справочник опроса, выбранного в редакторе когорты.
+function _eiosEditorMeta() {
+    return window.eiosMetaByProfile[parseInt(document.getElementById('ecSurvey').value, 10)] || {};
+}
 
 function _eiosFillSelect(sel, items, selected, emptyLabel) {
     sel.innerHTML = '';
@@ -235,7 +312,7 @@ function _eiosFillMulti(id, items, selected) {
 }
 
 function _eiosNodesAt(level, values) {
-    let nodes = (window.eiosMeta && window.eiosMeta.FilterTree) || [];
+    let nodes = _eiosEditorMeta().FilterTree || [];
     for (let i = 0; i < level; i++) {
         const node = nodes.find(n => n.Name === values[i]);
         if (!node) return [];
@@ -277,7 +354,7 @@ function _eiosFillDepartments(selected) {
     const sel = document.getElementById('ecDepartment');
     sel.innerHTML = '';
     sel.appendChild(new Option('— любая —', ''));
-    (window.eiosMeta.TeacherFilterTree || []).forEach(fac => {
+    (_eiosEditorMeta().TeacherFilterTree || []).forEach(fac => {
         const og = document.createElement('optgroup');
         og.label = fac.Name;
         (fac.Departments || []).forEach(d => og.appendChild(new Option(d, d)));
@@ -292,7 +369,7 @@ function _eiosToggleTeacherBlock() {
 }
 
 function _eiosQuestionById(id) {
-    return (window.eiosMeta.Questions || []).find(q => q.QuestionId === id);
+    return (_eiosEditorMeta().Questions || []).find(q => q.QuestionId === id);
 }
 
 function _eiosUpdateConditionBtn() {
@@ -339,7 +416,7 @@ function _eiosAddConditionRow(cond) {
             <button type="button" class="btn btn-sm btn-outline-danger ec-cond-remove" title="Удалить условие"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <div class="ec-cond-criteria"></div>`;
-    const questions = (window.eiosMeta.Questions || []).filter(q => EIOS_CONDITION_TYPES.has(q.QuestionType));
+    const questions = (_eiosEditorMeta().Questions || []).filter(q => EIOS_CONDITION_TYPES.has(q.QuestionType));
     _eiosFillSelect(row.querySelector('.ec-cond-question'),
         questions.map(q => ({ value: String(q.QuestionId), text: q.Text })),
         cond ? String(cond.QuestionId) : (questions[0] ? String(questions[0].QuestionId) : ''), null);
@@ -397,7 +474,7 @@ function _eiosCollectFilters(conditions) {
     return f;
 }
 
-function _eiosDefaultLabel(f) {
+function _eiosDefaultLabel(f, profileId) {
     const parts = [];
     if (f.Audience !== 0) parts.push(EIOS_AUDIENCES[f.Audience]);
     if (f.SchoolYear) parts.push(f.SchoolYear);
@@ -405,6 +482,8 @@ function _eiosDefaultLabel(f) {
     if (deepest) parts.push(f[deepest.key]);
     if (f.Groups && f.Groups.length) parts.push(`гр. ${f.Groups.join(', ')}`);
     if (f.Conditions && f.Conditions.length) parts.push(`срез: ${f.Conditions.length}`);
+    // При нескольких опросах подпись начинается с названия опроса — иначе серии в легенде не различить.
+    if (_eiosMultiSurvey()) return [_eiosSurveyTitle(profileId), ...parts].join(' · ');
     return parts.join(' · ') || 'Все респонденты';
 }
 
@@ -425,7 +504,7 @@ function _eiosFilterSummary(f) {
 function renderEiosCohorts() {
     const sel = window.eiosSelection;
     const list = document.getElementById('eiosCohortList');
-    document.getElementById('eiosCohortsSurveyTitle').textContent = sel ? sel.title : '';
+    document.getElementById('eiosCohortsSurveyTitle').textContent = sel ? sel.surveys.map(s => s.title).join(', ') : '';
     const cohorts = sel ? sel.cohorts : [];
     list.innerHTML = cohorts.length ? '' : '<p class="text-muted small mb-2">Добавьте хотя бы одну когорту. '
         + 'Несколько когорт сравниваются между собой так же, как несколько файлов.</p>';
@@ -434,11 +513,15 @@ function renderEiosCohorts() {
         card.className = 'd-flex align-items-start gap-2 border rounded p-2 mb-2';
         card.innerHTML = `
             <div class="flex-grow-1" style="min-width:0">
+                <div class="small text-muted text-truncate eios-cohort-survey"></div>
                 <div class="fw-semibold text-truncate eios-cohort-label"></div>
                 <div class="small text-muted eios-cohort-summary"></div>
             </div>
             <button type="button" class="btn btn-sm btn-outline-secondary eios-cohort-edit" title="Изменить"><i class="fa-solid fa-pen"></i></button>
             <button type="button" class="btn btn-sm btn-outline-danger eios-cohort-delete" title="Удалить"><i class="fa-solid fa-trash"></i></button>`;
+        const surveyEl = card.querySelector('.eios-cohort-survey');
+        if (_eiosMultiSurvey()) surveyEl.textContent = _eiosSurveyTitle(c.profile_id);
+        else surveyEl.remove();
         card.querySelector('.eios-cohort-label').textContent = c.label;
         card.querySelector('.eios-cohort-summary').textContent = _eiosFilterSummary(c.filters);
         card.querySelector('.eios-cohort-edit').dataset.idx = i;
@@ -449,15 +532,9 @@ function renderEiosCohorts() {
     document.getElementById('eiosBuildBtn').disabled = !cohorts.length;
 }
 
-function openEiosCohortEditor(idx) {
-    const meta = window.eiosMeta;
-    if (!meta) { showToast('Справочник опроса ещё не загружен — выберите опрос на шаге 1', 'warning'); return; }
-    _eiosEditingIdx = idx;
-    const cohort = idx === null ? null : window.eiosSelection.cohorts[idx];
-    const f = cohort ? cohort.filters : { Audience: 0 };
-
-    document.getElementById('ecLabel').value = cohort ? cohort.label : '';
-    document.getElementById('ecAudience').value = String(f.Audience || 0);
+// Справочные поля редактора — из справочника опроса, выбранного в #ecSurvey.
+function _eiosFillEditorRefs(f) {
+    const meta = _eiosEditorMeta();
     _eiosRenderTree(EIOS_TREE_LEVELS.map(l => f[l.key] || ''), f.Groups);
     _eiosFillMulti('ecChildProfiles', (meta.ChildProfiles || []).map(p => ({ value: String(p.Id), text: p.Text })), f.ChildProfiles);
     document.getElementById('ecChildProfilesBlock').classList.toggle('d-none', !(meta.ChildProfiles || []).length);
@@ -465,13 +542,33 @@ function openEiosCohortEditor(idx) {
     _eiosFillMulti('ecCitizenships', (meta.Citizenships || []).map(c => ({ value: c, text: c })), f.Citizenships);
     _eiosFillMulti('ecDegrees', (meta.AcademicDegrees || []).map(d => ({ value: d, text: d })), f.AcademicDegrees);
     _eiosFillDepartments(f.Department);
+    document.getElementById('ecConditions').innerHTML = '';
+    (f.Conditions || []).forEach(c => _eiosAddConditionRow(c));
+    _eiosUpdateConditionBtn();
+}
+
+function openEiosCohortEditor(idx) {
+    const sel = window.eiosSelection;
+    if (!sel || !sel.surveys.length || !_eiosAllMetaLoaded()) {
+        showToast('Справочник опроса ещё не загружен — выберите опрос на шаге 1', 'warning');
+        return;
+    }
+    _eiosEditingIdx = idx;
+    const cohort = idx === null ? null : sel.cohorts[idx];
+    const f = cohort ? cohort.filters : { Audience: 0 };
+
+    const surveySel = document.getElementById('ecSurvey');
+    _eiosFillSelect(surveySel, sel.surveys.map(s => ({ value: String(s.id), text: s.title })),
+        String(cohort ? cohort.profile_id : sel.surveys[0].id), null);
+    document.getElementById('ecSurveyBlock').classList.toggle('d-none', !_eiosMultiSurvey());
+
+    document.getElementById('ecLabel').value = cohort ? cohort.label : '';
+    document.getElementById('ecAudience').value = String(f.Audience || 0);
+    _eiosFillEditorRefs(f);
     document.getElementById('ecIsPps').value = f.IsPps === true ? 'true' : (f.IsPps === false ? 'false' : '');
     document.getElementById('ecAgeFrom').value = f.AgeFrom ?? '';
     document.getElementById('ecAgeTo').value = f.AgeTo ?? '';
-    document.getElementById('ecConditions').innerHTML = '';
-    (f.Conditions || []).forEach(c => _eiosAddConditionRow(c));
     _eiosToggleTeacherBlock();
-    _eiosUpdateConditionBtn();
 
     const editor = document.getElementById('eiosCohortEditor');
     editor.classList.remove('d-none');
@@ -499,10 +596,20 @@ function _eiosSaveCohort() {
         showToast('Возраст «от» больше, чем «до»', 'warning');
         return;
     }
-    const label = (document.getElementById('ecLabel').value.trim() || _eiosDefaultLabel(f)).slice(0, 120);
+    const profileId = parseInt(document.getElementById('ecSurvey').value, 10);
+    const sel = window.eiosSelection;
+    if (!sel.surveys.some(s => s.id === profileId)
+        || (_eiosEditingIdx !== null && _eiosEditingIdx >= sel.cohorts.length)) {
+        showToast('Выбор опросов изменился — откройте когорту заново', 'warning');
+        _eiosCloseEditor();
+        renderEiosCohorts();
+        return;
+    }
+    const label = (document.getElementById('ecLabel').value.trim() || _eiosDefaultLabel(f, profileId)).slice(0, 120);
     const list = window.eiosSelection.cohorts;
-    if (_eiosEditingIdx === null) list.push({ label, filters: f });
-    else list[_eiosEditingIdx] = { label, filters: f };
+    const cohort = { profile_id: profileId, label, filters: f };
+    if (_eiosEditingIdx === null) list.push(cohort);
+    else list[_eiosEditingIdx] = cohort;
     _eiosCloseEditor();
     renderEiosCohorts();
 }
@@ -517,7 +624,7 @@ async function buildEiosSession() {
     const r = await _eiosFetchJson('/eios/build_session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profile_id: sel.profileId, cohorts: sel.cohorts }),
+        body: JSON.stringify({ cohorts: sel.cohorts }),
     });
     spinner.classList.add('d-none');
     btn.disabled = false;
@@ -553,7 +660,9 @@ async function buildEiosSession() {
     }
     const skipped = r.data.skipped_questions || [];
     if (skipped.length) {
-        showToast(`Пропущено вопросов типа «соответствие»: ${skipped.length} — ЭИОС не отдаёт по ним ответы`, 'info');
+        const surveys = [...new Set(skipped.map(q => q.survey))];
+        const where = surveys.length > 1 ? ` (в опросах: ${surveys.map(_escHtml).join(', ')})` : '';
+        showToast(`Пропущено вопросов типа «соответствие»: ${skipped.length}${where} — ЭИОС не отдаёт по ним ответы`, 'info');
     }
 
     renderQuestionsStep3();
@@ -561,6 +670,7 @@ async function buildEiosSession() {
 }
 
 function rehydrateEiosUI() {
+    _eiosNormalizeSelection(window.eiosSelection);
     applyDataSourceUI();
     if (window.dataSource === 'eios') renderEiosCohorts();
     return true;
@@ -572,9 +682,15 @@ window.rehydrateEiosUI = rehydrateEiosUI;
 });
 
 document.getElementById('eiosToCohortsBtn').addEventListener('click', () => {
+    const sel = window.eiosSelection;
+    // Несколько опросов: по когорте «все респонденты» на каждый — их сразу можно сравнить.
+    if (!sel.cohorts.length && _eiosMultiSurvey()) {
+        sel.cohorts = sel.surveys.slice(0, EIOS_MAX_COHORTS)
+            .map(s => ({ profile_id: s.id, label: s.title.slice(0, 120), filters: { Audience: 0 } }));
+    }
     renderEiosCohorts();
     goToStep(1);
-    if (!window.eiosSelection.cohorts.length) openEiosCohortEditor(null);
+    if (!sel.cohorts.length) openEiosCohortEditor(null);
 });
 document.getElementById('eiosAddCohortBtn').addEventListener('click', () => openEiosCohortEditor(null));
 document.getElementById('eiosCohortList').addEventListener('click', e => {
@@ -588,6 +704,10 @@ document.getElementById('eiosCohortList').addEventListener('click', e => {
     }
 });
 document.getElementById('ecAudience').addEventListener('change', _eiosToggleTeacherBlock);
+// Смена опроса: фильтры и условия прежнего справочника к новому не подходят — сбрасываем их.
+document.getElementById('ecSurvey').addEventListener('change', () => {
+    _eiosFillEditorRefs({ Audience: parseInt(document.getElementById('ecAudience').value, 10) });
+});
 EIOS_TREE_LEVELS.forEach((lvl, i) => {
     document.getElementById(lvl.el).addEventListener('change', () => {
         // Смена уровня сбрасывает все нижележащие уровни и группы.

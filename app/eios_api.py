@@ -10,7 +10,8 @@ import time
 import httpx
 
 from app.database import get_eios_tokens, save_eios_tokens, delete_eios_tokens
-from app.eios_data import clean_metadata
+from app.eios_data import build_report_request, clean_metadata
+from app.schemas import EiosCohort
 
 api_base = lambda: os.getenv("EIOS_API_BASE", "https://papi.mrsu.ru").rstrip("/")
 token_url = lambda: os.getenv("EIOS_OAUTH_BASE", "https://p.mrsu.ru").rstrip("/") + "/OAuth/Token"
@@ -18,6 +19,7 @@ _TIMEOUT = lambda: float(os.getenv("EIOS_API_TIMEOUT", "120"))
 _VERIFY_TLS = lambda: os.getenv("EIOS_API_VERIFY_TLS", "true").lower() != "false"
 
 _REFRESH_MARGIN_SECONDS = 60
+_REPORT_CONCURRENCY = 2   # параллельных POST /v1/poolreport на одну сборку
 _METADATA_TTL_SECONDS = 3 * 3600
 _MSG_RELOGIN = "Сессия ЭИОС истекла или не выдан доступ к отчётам. Войдите заново."
 
@@ -178,3 +180,32 @@ async def get_metadata(user_id: str, profile_id: int) -> dict:
 
 async def get_report(user_id: str, body: dict) -> dict:
     return await _request(user_id, "POST", "/v1/poolreport", json=body)
+
+
+async def fetch_cohorts(user_id: str, cohorts: list[EiosCohort]) -> tuple[dict[int, dict], list[dict]]:
+    """Справочники опросов когорт (по profile_id) и отчёты в порядке когорт.
+    При нескольких опросах ошибка ЭИОС получает префикс с названием опроса."""
+    profile_ids = list(dict.fromkeys(c.profile_id for c in cohorts))
+    metas: dict[int, dict] = {}
+    sem = asyncio.Semaphore(_REPORT_CONCURRENCY)
+
+    async def named(pid: int, coro):
+        try:
+            return await coro
+        except EiosApiError as exc:
+            if len(profile_ids) == 1:
+                raise
+            title = (metas.get(pid) or {}).get("Title") or f"Опрос {pid}"
+            raise type(exc)(f"«{title}»: {exc.message}") from exc
+
+    async def meta(pid: int):
+        metas[pid] = await named(pid, get_metadata(user_id, pid))
+
+    async def report(cohort: EiosCohort):
+        async with sem:
+            body = build_report_request(cohort.profile_id, cohort.filters)
+            return await named(cohort.profile_id, get_report(user_id, body))
+
+    await asyncio.gather(*(meta(pid) for pid in profile_ids))
+    reports = await asyncio.gather(*(report(c) for c in cohorts))
+    return metas, list(reports)
