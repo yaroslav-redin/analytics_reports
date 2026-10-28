@@ -11,7 +11,7 @@ function renderQuestionsStep3() {
     if (window.processedFiles.length > 1) {
         if ($(fileSelect).hasClass('select2-hidden-accessible')) $(fileSelect).select2('destroy');
         fileSelect.innerHTML = window.processedFiles.map((f, i) =>
-            `<option value="${i}">${f.original_name}</option>`
+            `<option value="${i}">${_escHtml(f.original_name)}</option>`
         ).join('');
         fileSelectContainer.style.display = '';
         $(fileSelect).select2({ theme: 'bootstrap-5', width: '100%', language: 'ru'});
@@ -395,7 +395,7 @@ function rehydrateQuestionsUI() {
             $(fileSelect).select2('destroy');
         }
         fileSelect.innerHTML = window.processedFiles.map((f, i) =>
-            `<option value="${i}">${f.original_name}</option>`
+            `<option value="${i}">${_escHtml(f.original_name)}</option>`
         ).join('');
         if (fileSelectContainer) fileSelectContainer.style.display = '';
         if (window.jQuery) {

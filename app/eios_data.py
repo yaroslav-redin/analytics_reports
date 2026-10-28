@@ -126,14 +126,32 @@ def load_cohort(filepath: str) -> tuple[dict[str, dict[str, int]], dict[str, dic
 
 
 def write_eios_session(
-    session_path: str, meta: dict, cohort_reports: list[tuple[EiosCohort, dict]],
+    session_path: str, metas: dict[int, dict], cohort_reports: list[tuple[EiosCohort, dict]],
 ) -> tuple[list[dict], list[dict]]:
-    names, skipped = build_question_names(meta.get("Questions") or [])
-    per_cohort = [(c, r, report_to_counts(r, names), report_to_ranks(r, names)) for c, r in cohort_reports]
+    """metas — справочники опросов по profile_id; у каждой когорты колонки своего опроса."""
+    names_by_profile: dict[int, dict[int, str]] = {}
+    skipped: list[dict] = []
+    for cohort, _ in cohort_reports:
+        pid = cohort.profile_id
+        if pid in names_by_profile:
+            continue
+        meta = metas[pid]
+        names_by_profile[pid], survey_skipped = build_question_names(meta.get("Questions") or [])
+        title = meta.get("Title") or f"Опрос {pid}"
+        skipped.extend({**s, "survey": title} for s in survey_skipped)
 
-    with_data = {name for _, _, counts, ranks in per_cohort for name in (*counts, *ranks)}
-    ordered = [name for name in names.values() if name in with_data]
-    if not ordered:
+    per_cohort = []
+    for c, r in cohort_reports:
+        names = names_by_profile[c.profile_id]
+        per_cohort.append((c, r, report_to_counts(r, names), report_to_ranks(r, names)))
+
+    # Колонки опроса — вопросы с данными хотя бы в одной когорте этого же опроса, в порядке анкеты.
+    ordered_by_profile: dict[int, list[str]] = {}
+    for pid, names in names_by_profile.items():
+        with_data = {name for c, _, counts, ranks in per_cohort if c.profile_id == pid
+                     for name in (*counts, *ranks)}
+        ordered_by_profile[pid] = [name for name in names.values() if name in with_data]
+    if not any(ordered_by_profile.values()):
         raise EiosNoData("Ни одна анкета не попала в выборку. Ослабьте фильтры или выберите другой опрос.")
 
     processed = []
@@ -142,7 +160,7 @@ def write_eios_session(
         stats = {k: report.get(k) for k in _STAT_KEYS}
         payload = {
             "label": cohort.label,
-            "profile_id": meta.get("TestProfileId"),
+            "profile_id": cohort.profile_id,
             "filters": cohort.filters.model_dump(),
             "stats": stats,
             "counts": counts,
@@ -154,7 +172,7 @@ def write_eios_session(
             "original_name": cohort.label,
             "label": cohort.label,
             "clean_filename": filename,
-            "columns": [{"name": name, "is_system": False} for name in ordered],
+            "columns": [{"name": name, "is_system": False} for name in ordered_by_profile[cohort.profile_id]],
             "stats": stats,
         })
     return processed, skipped

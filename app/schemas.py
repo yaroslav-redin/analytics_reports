@@ -126,10 +126,10 @@ class EiosCohortFilters(BaseModel):
 
 
 class EiosCohort(BaseModel):
+    profile_id: int
     label: str = Field(..., min_length=1, max_length=120)
     filters: EiosCohortFilters = Field(default_factory=EiosCohortFilters)
 
 
 class EiosBuildRequest(BaseModel):
-    profile_id: int
     cohorts: List[EiosCohort] = Field(..., min_length=1, max_length=6)
