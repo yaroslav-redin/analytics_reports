@@ -172,7 +172,6 @@ uvicorn app.main:app --reload --port 64548
 | `EIOS_CLIENT_ID` | да | OAuth client_id, выданный EIOS |
 | `EIOS_CLIENT_SECRET` | да | OAuth client_secret |
 | `EIOS_REDIRECT_URI` | нет | Callback-URL; по умолчанию `http://localhost:64548/signin-eios` |
-| `EIOS_ALLOWED_ROLE` | нет | Если задана — пускать только пользователей с этой ролью |
 | `ADMIN_USER_IDS` | нет | Comma-separated EIOS-ID пользователей, которым сразу даётся is_admin |
 | `GIGACHAT_CREDENTIALS` | нет* | Authorization key GigaChat; без него LLM-функции недоступны |
 | `GIGACHAT_SCOPE` | нет | `GIGACHAT_API_PERS` (физлицо) / `GIGACHAT_API_B2B` / `GIGACHAT_API_CORP`; по умолчанию `GIGACHAT_API_PERS` |
@@ -766,7 +765,7 @@ cfg.get_json("pie_colors")           # → list/dict
 1. Проверяет отсутствие `error` и наличие `code`.
 2. Сверяет `state` с `session["oauth_state"]` (CSRF).
 3. `POST /Token` — обмен кода на `access_token`.
-4. `GET /User` — профиль; проверяет `EIOS_ALLOWED_ROLE`.
+4. `GET /User` — профиль (доступ ограничивается на стороне ЭИОС).
 5. `upsert_user()`, проверка `is_banned`, запись `session["user"]`.
 
 ---

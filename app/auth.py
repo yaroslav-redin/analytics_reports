@@ -96,10 +96,6 @@ async def auth_callback(request: Request):
 
     user_roles = [r["Name"] for r in user.get("Roles", [])]
 
-    allowed_role = os.getenv("EIOS_ALLOWED_ROLE", "")
-    if allowed_role and allowed_role not in user_roles:
-        return RedirectResponse("/login?error=access_denied")
-
     user_data = {
         "id": user["Id"],
         "fio": user["FIO"],
